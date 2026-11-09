@@ -1,7 +1,3 @@
 <Solution>
-  <Folder Name="/Database/">
-    <File Path="../../../Downloads/Database.sql" />
-    <File Path="../../../Downloads/StoredProcedures.sql" />
-  </Folder>
-  <Project Path="SolemateKicksDB/SolemateKicksDB.csproj" />
+  <Project Path="SolemateKicksDB/SolemateKicksDB.csproj" Id="182f2211-735c-425f-83ae-90041383ca9a" />
 </Solution>
