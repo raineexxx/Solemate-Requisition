@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Database/">
+    <File Path="../../../Downloads/Database.sql" />
+    <File Path="../../../Downloads/StoredProcedures.sql" />
+  </Folder>
+  <Project Path="SolemateKicksDB/SolemateKicksDB.csproj" />
+</Solution>

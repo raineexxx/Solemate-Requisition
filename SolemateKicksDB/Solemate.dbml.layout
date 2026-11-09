@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ordesignerObjectsDiagram dslVersion="1.0.0.0" absoluteBounds="0, 0, 11, 8.5" name="Solemate">
+  <DataContextMoniker Name="/SolemateDataContext" />
+  <nestedChildShapes>
+    <classShape Id="68e9476a-8dfa-4934-9120-36084cc201f4" absoluteBounds="0.75, 1.5, 2, 1.9631982421875003">
+      <DataClassMoniker Name="/SolemateDataContext/AppUser" />
+      <nestedChildShapes>
+        <elementListCompartment Id="e51311df-a47f-4a2f-a470-8e8fbaaac2bc" absoluteBounds="0.765, 1.96, 1.9700000000000002, 1.4031982421875" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="16e0d1ee-11e3-4022-9bec-b3ad2f548562" absoluteBounds="0.75, 5.875, 2, 1.1939925130208344">
+      <DataClassMoniker Name="/SolemateDataContext/Brand" />
+      <nestedChildShapes>
+        <elementListCompartment Id="4db3d057-4ca8-4a5b-a369-eba961a46c78" absoluteBounds="0.765, 6.335, 1.9700000000000002, 0.63399251302083326" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="5805f3f1-4b87-4d76-9b39-460e478709f3" absoluteBounds="3.5, 5.25, 2, 2.3478011067708344">
+      <DataClassMoniker Name="/SolemateDataContext/Product" />
+      <nestedChildShapes>
+        <elementListCompartment Id="b60f4642-af42-4a99-a2a6-2dc8f75c8e20" absoluteBounds="3.515, 5.71, 1.9700000000000002, 1.7878011067708335" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="38ffa3eb-2165-4b55-9b27-f056876f14e9" absoluteBounds="6.25, 1.625, 2, 1.5785953776041666">
+      <DataClassMoniker Name="/SolemateDataContext/RequisitionItem" />
+      <nestedChildShapes>
+        <elementListCompartment Id="e34aa9fa-f499-4e8d-a09e-ea27c06b1295" absoluteBounds="6.265, 2.085, 1.9700000000000002, 1.0185953776041665" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="62192932-99cd-479b-abe6-d0f378c72096" absoluteBounds="3.5, 1, 2, 2.9247054036458326">
+      <DataClassMoniker Name="/SolemateDataContext/Requisition" />
+      <nestedChildShapes>
+        <elementListCompartment Id="59088021-8333-44c2-bd4a-ece4710f4d46" absoluteBounds="3.515, 1.46, 1.9700000000000002, 2.364705403645833" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <associationConnector edgePoints="[(2.75 : 6.47199625651042); (3.5 : 6.47199625651042)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SolemateDataContext/Brand/Brand_Product" />
+      <nodes>
+        <classShapeMoniker Id="16e0d1ee-11e3-4022-9bec-b3ad2f548562" />
+        <classShapeMoniker Id="5805f3f1-4b87-4d76-9b39-460e478709f3" />
+      </nodes>
+    </associationConnector>
+    <associationConnector edgePoints="[(5.5 : 6.42390055338542); (7.25 : 6.42390055338542); (7.25 : 3.20359537760417)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SolemateDataContext/Product/Product_RequisitionItem" />
+      <nodes>
+        <classShapeMoniker Id="5805f3f1-4b87-4d76-9b39-460e478709f3" />
+        <classShapeMoniker Id="38ffa3eb-2165-4b55-9b27-f056876f14e9" />
+      </nodes>
+    </associationConnector>
+    <associationConnector edgePoints="[(5.5 : 2.41429768880208); (6.25 : 2.41429768880208)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SolemateDataContext/Requisition/Requisition_RequisitionItem" />
+      <nodes>
+        <classShapeMoniker Id="62192932-99cd-479b-abe6-d0f378c72096" />
+        <classShapeMoniker Id="38ffa3eb-2165-4b55-9b27-f056876f14e9" />
+      </nodes>
+    </associationConnector>
+    <associationConnector edgePoints="[(2.75 : 2.48159912109375); (3.5 : 2.48159912109375)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SolemateDataContext/AppUser/AppUser_Requisition" />
+      <nodes>
+        <classShapeMoniker Id="68e9476a-8dfa-4934-9120-36084cc201f4" />
+        <classShapeMoniker Id="62192932-99cd-479b-abe6-d0f378c72096" />
+      </nodes>
+    </associationConnector>
+    <associationConnector edgePoints="[(2.75 : 1.92829956054688); (3.5 : 1.92829956054688)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SolemateDataContext/AppUser/AppUser_Requisition1" />
+      <nodes>
+        <classShapeMoniker Id="68e9476a-8dfa-4934-9120-36084cc201f4" />
+        <classShapeMoniker Id="62192932-99cd-479b-abe6-d0f378c72096" />
+      </nodes>
+    </associationConnector>
+  </nestedChildShapes>
+</ordesignerObjectsDiagram>
