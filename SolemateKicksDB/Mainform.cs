@@ -1,5 +1,4 @@
-﻿using SolemateKicks;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -27,7 +26,7 @@ namespace SolemateKicks
         private ComboBox cmbStatus;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnRefresh;
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnRefresh;
 
         public MainForm()
         {
@@ -116,6 +115,7 @@ namespace SolemateKicks
             btnApprove = Theme.MakeButton("APPROVE", 120, true, OnApprove);
             btnReject = Theme.MakeButton("REJECT", 110, false, OnReject);
             btnCancel = Theme.MakeButton("CANCEL REQUEST", 150, false, OnCancelRequest);
+            btnInventory = Theme.MakeButton("INVENTORY", 120, false, OnInventory);
             btnRefresh = Theme.MakeButton("REFRESH", 100, false, (s, e) => LoadData());
 
             bool isHead = _user.Role == Roles.Head;
@@ -130,6 +130,7 @@ namespace SolemateKicks
                 flow.Controls.Add(btnApprove);
                 flow.Controls.Add(btnReject);
             }
+            flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnRefresh);
 
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
@@ -375,6 +376,15 @@ namespace SolemateKicks
             }
         }
 
+        private void OnInventory(object sender, EventArgs e)
+        {
+            using (InventoryForm f = new InventoryForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+        }
+
         private void OnApprove(object sender, EventArgs e)
         {
             RequisitionRow sel = Selected();
@@ -391,9 +401,20 @@ namespace SolemateKicks
                 if (!result.AllAvailable)
                     msg += "\r\n\r\n" + string.Join("\r\n", result.Shortages);
 
-                MessageBox.Show(this, msg, "Approved", MessageBoxButtons.OK,
-                    result.AllAvailable ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                bool openInventory = false;
+                if (result.AllAvailable)
+                {
+                    MessageBox.Show(this, msg, "Approved", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    msg += "\r\n\r\nOpen Inventory to check or add stock?";
+                    openInventory = MessageBox.Show(this, msg, "Approved - stock is short",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+                }
+
                 LoadData();
+                if (openInventory) OnInventory(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {
