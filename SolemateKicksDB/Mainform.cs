@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SolemateKicksDB;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -26,7 +27,7 @@ namespace SolemateKicks
         private ComboBox cmbStatus;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnRefresh;
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnRefresh;
 
         public MainForm()
         {
@@ -116,6 +117,7 @@ namespace SolemateKicks
             btnReject = Theme.MakeButton("REJECT", 110, false, OnReject);
             btnCancel = Theme.MakeButton("CANCEL REQUEST", 150, false, OnCancelRequest);
             btnInventory = Theme.MakeButton("INVENTORY", 120, false, OnInventory);
+            btnDelivery = Theme.MakeButton("DELIVERY", 110, false, OnDelivery);
             btnRefresh = Theme.MakeButton("REFRESH", 100, false, (s, e) => LoadData());
 
             bool isHead = _user.Role == Roles.Head;
@@ -131,6 +133,7 @@ namespace SolemateKicks
                 flow.Controls.Add(btnReject);
             }
             flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
+            flow.Controls.Add(btnDelivery);    // link to the Delivery module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnRefresh);
 
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
@@ -383,6 +386,15 @@ namespace SolemateKicks
                 f.ShowDialog(this);
             }
             LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+        }
+
+        private void OnDelivery(object sender, EventArgs e)
+        {
+            using (DeliveryForm f = new DeliveryForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadData();   // received goods change the stock, so refresh the stock check columns
         }
 
         private void OnApprove(object sender, EventArgs e)
