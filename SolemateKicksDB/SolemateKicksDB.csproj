@@ -125,7 +125,7 @@
     <Content Include="Database\1_Database %281%29.sql" />
     <Content Include="Database\2_StoredProcedures %281%29.sql" />
     <Content Include="Database\3_Inventory %281%29.sql" />
-    <Content Include="Database\4_Delivery.sql" />
+    <Content Include="Database\6_Delivery.sql" />
     <Content Include="Database\Database.sql" />
     <Content Include="Database\StoredProcedures.sql" />
   </ItemGroup>
