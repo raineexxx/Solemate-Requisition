@@ -51,6 +51,10 @@
     <Compile Include="InputDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="InventoryForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="InventoryService.cs" />
     <Compile Include="LoginForm.cs">
       <SubType>Form</SubType>
     </Compile>

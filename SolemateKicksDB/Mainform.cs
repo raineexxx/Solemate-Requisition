@@ -131,6 +131,7 @@ namespace SolemateKicks
                 flow.Controls.Add(btnReject);
             }
             flow.Controls.Add(btnRefresh);
+            flow.Controls.Add(Theme.MakeButton("INVENTORY", 120, false, OnInventory));
 
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
 
@@ -441,6 +442,11 @@ namespace SolemateKicks
                 ShowError(ex);
                 LoadData();
             }
+        }
+
+        private void OnInventory(object sender, EventArgs e)
+        {
+            using (InventoryForm f = new InventoryForm()) f.ShowDialog(this);
         }
 
         private void ShowError(Exception ex)

@@ -1,7 +1,10 @@
 <Solution>
   <Folder Name="/Database/">
     <File Path="../../../Downloads/Database.sql" />
+    <File Path="../../../Downloads/Solemate_SQL_run_in_order/1_Database.sql" />
+    <File Path="../../../Downloads/Solemate_SQL_run_in_order/2_StoredProcedures.sql" />
+    <File Path="../../../Downloads/Solemate_SQL_run_in_order/3_Inventory.sql" />
     <File Path="../../../Downloads/StoredProcedures.sql" />
   </Folder>
-  <Project Path="SolemateKicksDB/SolemateKicksDB.csproj" />
+  <Project Path="SolemateKicksDB/SolemateKicksDB.csproj" Id="182f2211-735c-425f-83ae-90041383ca9a" />
 </Solution>
