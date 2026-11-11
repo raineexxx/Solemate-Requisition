@@ -112,10 +112,8 @@
     <Service Include="{3259AA49-8AA1-44D3-9025-A0B520596A8C}" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Database\1_Database %281%29.sql" />
-    <Content Include="Database\2_StoredProcedures %281%29.sql" />
-    <Content Include="Database\3_Inventory %281%29.sql" />
     <Content Include="Database\6_Delivery.sql" />
+    <Content Include="Database\7_DeliveryUpgrade.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
