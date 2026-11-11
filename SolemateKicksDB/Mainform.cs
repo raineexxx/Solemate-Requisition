@@ -1,4 +1,4 @@
-﻿using SolemateKicksDB;
+using SolemateKicksDB;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -135,7 +135,6 @@ namespace SolemateKicks
             flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnDelivery);    // link to the Delivery module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnRefresh);
-            flow.Controls.Add(Theme.MakeButton("INVENTORY", 120, false, OnInventory));
 
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
 
@@ -475,11 +474,6 @@ namespace SolemateKicks
                 ShowError(ex);
                 LoadData();
             }
-        }
-
-        private void OnInventory(object sender, EventArgs e)
-        {
-            using (InventoryForm f = new InventoryForm()) f.ShowDialog(this);
         }
 
         private void ShowError(Exception ex)
