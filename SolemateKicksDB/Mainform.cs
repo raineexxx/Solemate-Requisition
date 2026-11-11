@@ -27,8 +27,7 @@ namespace SolemateKicks
         private ComboBox cmbStatus;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnRefresh;
-
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnRefresh;
         public MainForm()
         {
             Text = "Solemate - Requisition";
@@ -117,6 +116,7 @@ namespace SolemateKicks
             btnReject = Theme.MakeButton("REJECT", 110, false, OnReject);
             btnCancel = Theme.MakeButton("CANCEL REQUEST", 150, false, OnCancelRequest);
             btnInventory = Theme.MakeButton("INVENTORY", 120, false, OnInventory);
+            btnPurchasing = Theme.MakeButton("PURCHASING", 130, false, OnPurchasing);
             btnDelivery = Theme.MakeButton("DELIVERY", 110, false, OnDelivery);
             btnRefresh = Theme.MakeButton("REFRESH", 100, false, (s, e) => LoadData());
 
@@ -133,6 +133,7 @@ namespace SolemateKicks
                 flow.Controls.Add(btnReject);
             }
             flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
+            flow.Controls.Add(btnPurchasing);  // link to the Purchasing module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnDelivery);    // link to the Delivery module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnRefresh);
 
@@ -386,6 +387,15 @@ namespace SolemateKicks
                 f.ShowDialog(this);
             }
             LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+        }
+
+        private void OnPurchasing(object sender, EventArgs e)
+        {
+            using (PurchasingForm f = new PurchasingForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadData();
         }
 
         private void OnDelivery(object sender, EventArgs e)
