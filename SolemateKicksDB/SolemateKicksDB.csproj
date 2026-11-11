@@ -47,6 +47,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Deliverservice.cs" />
+    <Compile Include="Deliveryform.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Helper.cs" />
     <Compile Include="InputDialog.cs">
       <SubType>Form</SubType>
@@ -106,6 +110,14 @@
   </ItemGroup>
   <ItemGroup>
     <Service Include="{3259AA49-8AA1-44D3-9025-A0B520596A8C}" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Database\1_Database %281%29.sql" />
+    <Content Include="Database\2_StoredProcedures %281%29.sql" />
+    <Content Include="Database\3_Inventory %281%29.sql" />
+    <Content Include="Database\6_Delivery.sql" />
+    <Content Include="Database\Database.sql" />
+    <Content Include="Database\StoredProcedures.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
