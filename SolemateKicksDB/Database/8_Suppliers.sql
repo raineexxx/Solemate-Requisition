@@ -196,3 +196,25 @@ BEGIN
     SELECT @PoId;
 END
 GO
+
+/* ---------------- SUPPLIER LIST (same for everyone) ----------------
+   Adds each supplier only when its name is not in the table yet, so it is safe to run again
+   and it never creates duplicates or changes suppliers that already exist. */
+INSERT INTO dbo.Suppliers (SupplierName, [Address], Email)
+SELECT v.SupplierName, v.[Address], v.Email
+FROM (VALUES
+    (N'Olem Shoe Corp',
+     N'800 NW 21st Street, Miami, FL 33127, USA',
+     N'customer.service@olemshoe.com'),
+    (N'Dong Hung Industry Joint Stock Company (DHI)',
+     N'667 Dien Bien Phu Street, Ward 22, Binh Thanh District, Ho Chi Minh City, Vietnam',
+     N'contact@donghungfootwear.com'),
+    (N'Clarco Shoes (Jinjiang Clarco Footwear Co., Ltd.)',
+     N'7th Floor, Business Bldg No. 234-1, Qiguang East Rd, Handai, Chendai, Jinjiang, Fujian, China',
+     N'sales01@clarco.com')
+) AS v (SupplierName, [Address], Email)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.Suppliers s WHERE s.SupplierName = v.SupplierName);
+GO
+
+SELECT SupplierId, SupplierName, [Address], Email, IsActive FROM dbo.Suppliers ORDER BY SupplierName;
+GO
