@@ -1,22 +1,53 @@
 USE SolemateKicksDB;
 GO
 
-/* Run this AFTER 4_Purchasing.sql and 5_PurchasingRoles.sql.
-   It is safe to run more than once. */
+/* =====================================================================
+   Purchasing module - suppliers (name, address, email)
 
-/* ---------------- TABLE ---------------- */
+   Run AFTER 4_Purchasing.sql. It works before OR after the Delivery upgrade script,
+   because the Suppliers table is shared with the Delivery module: this script creates
+   the table with ALL columns, or adds the missing ones to a table that already exists.
+   Safe to run more than once.
+   ===================================================================== */
+
+/* ---------------- TABLE (shared with Delivery) ---------------- */
 IF OBJECT_ID(N'dbo.Suppliers') IS NULL
 BEGIN
     CREATE TABLE dbo.Suppliers (
         SupplierId    INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Suppliers PRIMARY KEY,
         SupplierName  NVARCHAR(100) NOT NULL CONSTRAINT UQ_Suppliers_Name UNIQUE,
+        ContactPerson NVARCHAR(100) NULL,
+        Phone         NVARCHAR(30)  NULL,
+        Email         NVARCHAR(100) NULL,
         [Address]     NVARCHAR(200) NOT NULL CONSTRAINT DF_Suppliers_Address DEFAULT N'',
-        Email         NVARCHAR(100) NOT NULL CONSTRAINT DF_Suppliers_Email DEFAULT N''
+        IsActive      BIT NOT NULL CONSTRAINT DF_Suppliers_Active DEFAULT 1,
+        DateCreated   DATETIME NOT NULL CONSTRAINT DF_Suppliers_Date DEFAULT (GETDATE())
     );
 END
 GO
 
-/* Purchase orders now point to a supplier (the name is still copied into PurchaseOrders.Supplier) */
+/* the table already existed (older version of this script, or the Delivery version): add whatever is missing */
+IF COL_LENGTH(N'dbo.Suppliers', N'ContactPerson') IS NULL
+    ALTER TABLE dbo.Suppliers ADD ContactPerson NVARCHAR(100) NULL;
+IF COL_LENGTH(N'dbo.Suppliers', N'Phone') IS NULL
+    ALTER TABLE dbo.Suppliers ADD Phone NVARCHAR(30) NULL;
+IF COL_LENGTH(N'dbo.Suppliers', N'Email') IS NULL
+    ALTER TABLE dbo.Suppliers ADD Email NVARCHAR(100) NULL;
+IF COL_LENGTH(N'dbo.Suppliers', N'Address') IS NULL
+    ALTER TABLE dbo.Suppliers ADD [Address] NVARCHAR(200) NOT NULL CONSTRAINT DF_Suppliers_Address DEFAULT N'';
+IF COL_LENGTH(N'dbo.Suppliers', N'IsActive') IS NULL
+    ALTER TABLE dbo.Suppliers ADD IsActive BIT NOT NULL CONSTRAINT DF_Suppliers_Active DEFAULT 1;
+IF COL_LENGTH(N'dbo.Suppliers', N'DateCreated') IS NULL
+    ALTER TABLE dbo.Suppliers ADD DateCreated DATETIME NOT NULL CONSTRAINT DF_Suppliers_Date DEFAULT (GETDATE());
+GO
+
+/* the email may be left blank (Delivery saves NULL for a blank email) */
+IF EXISTS (SELECT 1 FROM sys.columns
+           WHERE object_id = OBJECT_ID(N'dbo.Suppliers') AND name = N'Email' AND is_nullable = 0)
+    ALTER TABLE dbo.Suppliers ALTER COLUMN Email NVARCHAR(100) NULL;
+GO
+
+/* Purchase orders point to a supplier (the name is still copied into PurchaseOrders.Supplier) */
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'SupplierId') IS NULL
 BEGIN
     ALTER TABLE dbo.PurchaseOrders
@@ -26,13 +57,18 @@ GO
 
 /* ---------------- PROCEDURES ---------------- */
 
-/* List all suppliers */
+/* List suppliers. @ActiveOnly = 1 hides suppliers that were set inactive (used by the New PO dialog). */
 CREATE OR ALTER PROCEDURE dbo.usp_SupGetAll
+    @ActiveOnly INT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT SupplierId, SupplierName, [Address], Email
+    SELECT SupplierId,
+           SupplierName,
+           ISNULL([Address], N'') AS [Address],
+           ISNULL(Email, N'')     AS Email
     FROM dbo.Suppliers
+    WHERE @ActiveOnly = 0 OR IsActive = 1
     ORDER BY SupplierName;
 END
 GO
@@ -65,7 +101,7 @@ BEGIN
     IF @SupplierId = 0
     BEGIN
         INSERT INTO dbo.Suppliers (SupplierName, [Address], Email)
-        VALUES (@SupplierName, @Address, @Email);
+        VALUES (@SupplierName, @Address, NULLIF(@Email, N''));
 
         SET @SupplierId = SCOPE_IDENTITY();
     END
@@ -75,18 +111,25 @@ BEGIN
             THROW 50013, N'Supplier not found.', 1;
 
         UPDATE dbo.Suppliers
-        SET SupplierName = @SupplierName, [Address] = @Address, Email = @Email
+        SET SupplierName = @SupplierName, [Address] = @Address, Email = NULLIF(@Email, N'')
         WHERE SupplierId = @SupplierId;
 
         -- keep the supplier name on existing purchase orders up to date
         UPDATE dbo.PurchaseOrders SET Supplier = @SupplierName WHERE SupplierId = @SupplierId;
+
+        -- ...and on existing deliveries, when the Delivery module is installed
+        IF OBJECT_ID(N'dbo.Deliveries') IS NOT NULL AND COL_LENGTH(N'dbo.Deliveries', N'SupplierId') IS NOT NULL
+            EXEC sp_executesql
+                N'UPDATE dbo.Deliveries SET SupplierName = @n WHERE SupplierId = @id',
+                N'@n NVARCHAR(100), @id INT',
+                @n = @SupplierName, @id = @SupplierId;
     END
 
     SELECT @SupplierId;
 END
 GO
 
-/* Delete a supplier. Not allowed when it already has purchase orders. Head / Manager only. */
+/* Delete a supplier. Not allowed when purchase orders or deliveries already use it. Head / Manager only. */
 CREATE OR ALTER PROCEDURE dbo.usp_SupDelete
     @SupplierId INT,
     @UserId     INT
@@ -100,15 +143,18 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM dbo.Suppliers WHERE SupplierId = @SupplierId)
         THROW 50013, N'Supplier not found.', 1;
 
-    IF EXISTS (SELECT 1 FROM dbo.PurchaseOrders WHERE SupplierId = @SupplierId)
-        THROW 50015, N'This supplier already has purchase orders, so it cannot be deleted.', 1;
-
-    DELETE FROM dbo.Suppliers WHERE SupplierId = @SupplierId;
+    BEGIN TRY
+        DELETE FROM dbo.Suppliers WHERE SupplierId = @SupplierId;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() = 547   -- foreign key: purchase orders or deliveries use this supplier
+            THROW 50015, N'This supplier is used by purchase orders or deliveries, so it cannot be deleted.', 1;
+        THROW;
+    END CATCH
 END
 GO
 
-/* Create a PO from an approved requisition, for a chosen supplier. Returns the new PurchaseOrderId.
-   This replaces the old version that took the supplier as typed text. */
+/* Create a PO from an approved requisition, for a chosen (active) supplier. Returns the new PurchaseOrderId. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @RequisitionId INT,
     @SupplierId    INT,
@@ -118,10 +164,11 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @Supplier NVARCHAR(100) = (SELECT SupplierName FROM dbo.Suppliers WHERE SupplierId = @SupplierId);
+    DECLARE @Supplier NVARCHAR(100) =
+        (SELECT SupplierName FROM dbo.Suppliers WHERE SupplierId = @SupplierId AND IsActive = 1);
 
     IF @Supplier IS NULL
-        THROW 50001, N'Please choose a supplier.', 1;
+        THROW 50001, N'Please choose an active supplier.', 1;
     IF NOT EXISTS (SELECT 1 FROM dbo.AppUsers WHERE UserId = @UserId AND [Role] IN (N'Head', N'Manager'))
         THROW 50006, N'Only the Head or a Manager can create a purchase order.', 1;
     IF NOT EXISTS (SELECT 1 FROM dbo.Requisitions WHERE RequisitionId = @RequisitionId AND [Status] = N'Approved')
