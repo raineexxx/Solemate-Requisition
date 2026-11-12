@@ -1,6 +1,6 @@
 -- =====================================================================
 --  Solemate Delivery module - upgrade
---  Run AFTER 6_Delivery.sql. Safe to run more than once.
+--  Run AFTER 6_Delivery.sql (before or after 8_Suppliers.sql). Safe to run more than once.
 --
 --  Adds:
 --   1. Expected delivery date + overdue flag
@@ -24,6 +24,9 @@ GO
 
 -- ---------------------------------------------------------------------
 --  3. SUPPLIERS
+--  This table is SHARED with the Purchasing module (8_Suppliers.sql), which also needs
+--  the [Address] column. This block works in either run order: it creates the table
+--  with ALL the columns, or adds the missing ones to a table that already exists.
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('dbo.Suppliers', 'U') IS NULL
 BEGIN
@@ -34,10 +37,32 @@ BEGIN
         ContactPerson NVARCHAR(100) NULL,
         Phone         NVARCHAR(30)  NULL,
         Email         NVARCHAR(100) NULL,
+        [Address]     NVARCHAR(200) NOT NULL CONSTRAINT DF_Suppliers_Address DEFAULT N'',
         IsActive      BIT NOT NULL CONSTRAINT DF_Suppliers_Active DEFAULT 1,
         DateCreated   DATETIME NOT NULL CONSTRAINT DF_Suppliers_Date DEFAULT (GETDATE())
     );
 END
+GO
+
+-- the table already existed (e.g. Purchasing's version): add whatever is missing
+IF COL_LENGTH('dbo.Suppliers', 'ContactPerson') IS NULL
+    ALTER TABLE dbo.Suppliers ADD ContactPerson NVARCHAR(100) NULL;
+IF COL_LENGTH('dbo.Suppliers', 'Phone') IS NULL
+    ALTER TABLE dbo.Suppliers ADD Phone NVARCHAR(30) NULL;
+IF COL_LENGTH('dbo.Suppliers', 'Email') IS NULL
+    ALTER TABLE dbo.Suppliers ADD Email NVARCHAR(100) NULL;
+IF COL_LENGTH('dbo.Suppliers', 'Address') IS NULL
+    ALTER TABLE dbo.Suppliers ADD [Address] NVARCHAR(200) NOT NULL CONSTRAINT DF_Suppliers_Address DEFAULT N'';
+IF COL_LENGTH('dbo.Suppliers', 'IsActive') IS NULL
+    ALTER TABLE dbo.Suppliers ADD IsActive BIT NOT NULL CONSTRAINT DF_Suppliers_Active DEFAULT 1;
+IF COL_LENGTH('dbo.Suppliers', 'DateCreated') IS NULL
+    ALTER TABLE dbo.Suppliers ADD DateCreated DATETIME NOT NULL CONSTRAINT DF_Suppliers_Date DEFAULT (GETDATE());
+GO
+
+-- Purchasing made Email NOT NULL, but Delivery saves NULL when the email is left blank
+IF EXISTS (SELECT 1 FROM sys.columns
+           WHERE object_id = OBJECT_ID('dbo.Suppliers') AND name = 'Email' AND is_nullable = 0)
+    ALTER TABLE dbo.Suppliers ALTER COLUMN Email NVARCHAR(100) NULL;
 GO
 
 -- ---------------------------------------------------------------------
