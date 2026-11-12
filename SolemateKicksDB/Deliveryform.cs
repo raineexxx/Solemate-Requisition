@@ -1,4 +1,4 @@
-﻿using SolemateKicksDB;
+using SolemateKicksDB;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -461,7 +461,7 @@ namespace SolemateKicks
             if (overdue > 0)
                 parts.Add(string.Format("{0} delivery(ies) are overdue - the expected date has passed.", overdue));
             if (pending > 0)
-                parts.Add(string.Format("{0} delivery(ies) still have outstanding items - follow up with the supplier.", pending));
+                msg = string.Format("   {0} delivery(ies) still have outstanding items - follow up with the supplier.", pending);
 
             string msg = parts.Count == 0 ? null : "   " + string.Join("     |     ", parts);
 
