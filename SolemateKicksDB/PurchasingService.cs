@@ -104,6 +104,7 @@ namespace SolemateKicks
         {
             using (SolemateDataContext db = new SolemateDataContext())
             {
+                return db.ExecuteQuery<SupplierRow>("EXEC dbo.usp_SupGetAll {0}", activeOnly ? 1 : 0).ToList();
             }
         }
 

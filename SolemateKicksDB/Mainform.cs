@@ -45,8 +45,7 @@ namespace SolemateKicks
         private Label lblCount;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnRefresh;
-
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnRefresh, btnDetails;
         public MainForm()
         {
             Text = "Solemate - Requisition";
@@ -132,14 +131,17 @@ namespace SolemateKicks
                 Padding = new Padding(8, 11, 0, 0)
             };
 
-            btnNew = Theme.MakeButton("+ NEW REQUISITION", 180, true, OnNew);
-            btnRevise = Theme.MakeButton("REVISE", 100, false, OnRevise);
-            btnApprove = Theme.MakeButton("APPROVE", 120, true, OnApprove);
-            btnReject = Theme.MakeButton("REJECT", 110, false, OnReject);
-            btnCancel = Theme.MakeButton("CANCEL REQUEST", 150, false, OnCancelRequest);
-            btnInventory = Theme.MakeButton("INVENTORY", 120, false, OnInventory);
-            btnDelivery = Theme.MakeButton("DELIVERY", 110, false, OnDelivery);
-            btnRefresh = Theme.MakeButton("REFRESH", 100, false, (s, e) => LoadData());
+            // widths are kept small enough that every button fits next to the "Show" filter (Cashier has the most buttons)
+            btnNew = Theme.MakeButton("+ NEW REQUISITION", 170, true, OnNew);
+            btnRevise = Theme.MakeButton("REVISE", 90, false, OnRevise);
+            btnDetails = Theme.MakeButton("DETAILS", 100, false, OnDetails);
+            btnApprove = Theme.MakeButton("APPROVE", 110, true, OnApprove);
+            btnReject = Theme.MakeButton("REJECT", 100, false, OnReject);
+            btnCancel = Theme.MakeButton("CANCEL REQUEST", 140, false, OnCancelRequest);
+            btnInventory = Theme.MakeButton("INVENTORY", 110, false, OnInventory);
+            btnPurchasing = Theme.MakeButton("PURCHASING", 120, false, OnPurchasing);
+            btnDelivery = Theme.MakeButton("DELIVERY", 100, false, OnDelivery);
+            btnRefresh = Theme.MakeButton("REFRESH", 90, false, (s, e) => LoadData());
 
             bool isHead = _user.Role == Roles.Head;
             if (!isHead)
@@ -630,15 +632,6 @@ namespace SolemateKicks
             LoadData();
         }
 
-        private void OnPurchasing(object sender, EventArgs e)
-        {
-            using (PurchasingForm f = new PurchasingForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();
-        }
-
         private void OnDelivery(object sender, EventArgs e)
         {
             using (DeliveryForm f = new DeliveryForm())
@@ -774,11 +767,6 @@ namespace SolemateKicks
                 ShowError(ex);
                 LoadData();
             }
-        }
-
-        private void OnInventory(object sender, EventArgs e)
-        {
-            using (InventoryForm f = new InventoryForm()) f.ShowDialog(this);
         }
 
         private void ShowError(Exception ex)
