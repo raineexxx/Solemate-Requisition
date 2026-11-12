@@ -26,6 +26,12 @@ namespace SolemateKicks
         public int OutstandingQty { get; set; }
         public string CreatedBy { get; set; }
         public string Remarks { get; set; }
+
+        // added by 7_DeliveryUpgrade.sql
+        public int? SupplierId { get; set; }
+        public DateTime? ExpectedDate { get; set; }
+        public int IsOverdue { get; set; }
+        public decimal TotalValue { get; set; }
     }
 
     public class DeliveryItemRow
@@ -41,6 +47,10 @@ namespace SolemateKicks
         public int RejectedQty { get; set; }
         public int OutstandingQty { get; set; }
         public string Note { get; set; }
+
+        // added by 7_DeliveryUpgrade.sql
+        public decimal UnitCost { get; set; }
+        public decimal LineValue { get; set; }
     }
 
     public class ProductPick
@@ -90,6 +100,46 @@ namespace SolemateKicks
         public string ByUser { get; set; }
     }
 
+    /// <summary>One supplier from the Suppliers table (usp_DelGetSuppliers).</summary>
+    public class DeliverySupplier
+    {
+        public int SupplierId { get; set; }
+        public string SupplierName { get; set; }
+        public string ContactPerson { get; set; }
+        public string Phone { get; set; }
+        public string Email { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    /// <summary>Header of one receiving report, used by the print preview (usp_DelGetReportHeader).</summary>
+    public class ReportHeaderRow
+    {
+        public string ReportRef { get; set; }
+        public DateTime DateReceived { get; set; }
+        public string ReceivedBy { get; set; }
+        public int TotalAccepted { get; set; }
+        public int TotalRejected { get; set; }
+        public string Remarks { get; set; }
+        public string DeliveryRef { get; set; }
+        public string PoRef { get; set; }
+        public string SupplierName { get; set; }
+        public string RequisitionRef { get; set; }
+    }
+
+    /// <summary>One line of a receiving report (usp_DelGetReportLines).</summary>
+    public class ReportLineRow
+    {
+        public string Sku { get; set; }
+        public string Brand { get; set; }
+        public string Product { get; set; }
+        public int Size { get; set; }
+        public int AcceptedQty { get; set; }
+        public int RejectedQty { get; set; }
+        public string Note { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal LineValue { get; set; }
+    }
+
     /// <summary>What usp_DelReceive returns after a receipt.</summary>
     public class ReceiveResult
     {
@@ -111,6 +161,10 @@ namespace SolemateKicks
         public string Sku { get; set; }
         public string Display { get; set; }
         public int OrderedQty { get; set; }
+        public decimal UnitCost { get; set; }
+
+        /// <summary>Shown in the grid, never saved (OrderedQty x UnitCost).</summary>
+        public decimal LineTotal { get { return OrderedQty * UnitCost; } }
     }
 
     public class ReceiveLine
@@ -128,12 +182,13 @@ namespace SolemateKicks
 
     /// <summary>
     /// All database work for the Delivery module. Same style as InventoryService:
-    /// it calls the usp_Del... procedures from 4_Delivery.sql with db.ExecuteQuery,
-    /// so Solemate.dbml does not need to be changed.
+    /// it calls the usp_Del... procedures from 6_Delivery.sql and 7_DeliveryUpgrade.sql
+    /// with db.ExecuteQuery, so Solemate.dbml does not need to be changed.
     /// Errors raised by THROW in SQL arrive here as exceptions whose Message is the SQL text.
     /// </summary>
     public static class DeliveryService
     {
+        /// <summary>All deliveries. Search, status and date filters are applied on screen.</summary>
         public static List<DeliveryRow> GetDeliveries()
         {
             using (SolemateDataContext db = new SolemateDataContext())
@@ -174,9 +229,42 @@ namespace SolemateKicks
             }
         }
 
-        /// <summary>Records an expected delivery. requisitionId = 0 means not linked. Returns the DEL- reference.</summary>
-        public static string CreateDelivery(AppUser user, string supplier, string poRef, int requisitionId,
-            string remarks, IEnumerable<DeliveryLine> lines)
+        // ------------------------------------------------------------------
+        //  Suppliers
+        // ------------------------------------------------------------------
+        public static List<DeliverySupplier> GetSuppliers()
+        {
+            using (SolemateDataContext db = new SolemateDataContext())
+            {
+                return db.ExecuteQuery<DeliverySupplier>("EXEC dbo.usp_DelGetSuppliers {0}", 1).ToList();
+            }
+        }
+
+        /// <summary>Adds (supplierId = 0) or updates a supplier. Returns the supplier id.</summary>
+        public static int SaveSupplier(AppUser user, int supplierId, string name, string contact, string phone, string email)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new InvalidOperationException("Supplier name is required.");
+
+            using (SolemateDataContext db = new SolemateDataContext())
+            {
+                return db.ExecuteQuery<int>(
+                    "EXEC dbo.usp_DelSaveSupplier {0}, {1}, {2}, {3}, {4}, {5}, {6}",
+                    user.UserId, supplierId, name.Trim(), contact ?? string.Empty,
+                    phone ?? string.Empty, email ?? string.Empty, 1).First();
+            }
+        }
+
+        // ------------------------------------------------------------------
+        //  Create / receive
+        // ------------------------------------------------------------------
+        /// <summary>
+        /// Records an expected delivery. requisitionId = 0 means not linked,
+        /// supplierId = 0 means "use the supplier name (created if new)",
+        /// expectedDate = null means no due date. Returns the DEL- reference.
+        /// </summary>
+        public static string CreateDelivery(AppUser user, string supplier, int supplierId, string poRef,
+            int requisitionId, DateTime? expectedDate, string remarks, IEnumerable<DeliveryLine> lines)
         {
             List<DeliveryLine> items = lines.ToList();
             if (string.IsNullOrWhiteSpace(supplier))
@@ -185,18 +273,35 @@ namespace SolemateKicks
                 throw new InvalidOperationException("Add at least one item to the delivery.");
             if (items.Any(l => l.OrderedQty < 1))
                 throw new InvalidOperationException("Every ordered quantity must be at least 1.");
+            if (items.Any(l => l.UnitCost < 0))
+                throw new InvalidOperationException("Unit cost cannot be negative.");
 
             XElement root = new XElement("Items",
-                items.Select(l => new XElement("Item",
-                    new XAttribute("ProductId", l.ProductId),
-                    new XAttribute("Quantity", l.OrderedQty))));
+                items.Select(l =>
+                {
+                    XElement item = new XElement("Item",
+                        new XAttribute("ProductId", l.ProductId),
+                        new XAttribute("Quantity", l.OrderedQty));
+                    if (l.UnitCost > 0) item.Add(new XAttribute("UnitCost", l.UnitCost));
+                    return item;
+                }));
+
+            string sql = "EXEC dbo.usp_DelCreate @UserId={0}, @SupplierName={1}, @PoRef={2}, @RequisitionId={3}, " +
+                         "@Remarks={4}, @ItemsXml={5}, @SupplierId={6}";
+            List<object> args = new List<object>
+            {
+                user.UserId, supplier.Trim(), poRef ?? string.Empty, requisitionId,
+                remarks ?? string.Empty, root.ToString(SaveOptions.DisableFormatting), supplierId
+            };
+            if (expectedDate.HasValue)
+            {
+                sql += ", @ExpectedDate={7}";
+                args.Add(expectedDate.Value.Date);
+            }
 
             using (SolemateDataContext db = new SolemateDataContext())
             {
-                return db.ExecuteQuery<string>(
-                    "EXEC dbo.usp_DelCreate {0}, {1}, {2}, {3}, {4}, {5}",
-                    user.UserId, supplier.Trim(), poRef ?? string.Empty, requisitionId,
-                    remarks ?? string.Empty, root.ToString(SaveOptions.DisableFormatting)).First();
+                return db.ExecuteQuery<string>(sql, args.ToArray()).First();
             }
         }
 
@@ -221,6 +326,9 @@ namespace SolemateKicks
             }
         }
 
+        // ------------------------------------------------------------------
+        //  Reports
+        // ------------------------------------------------------------------
         public static List<ReceivingReportRow> GetReports(int deliveryId)
         {
             using (SolemateDataContext db = new SolemateDataContext())
@@ -234,6 +342,23 @@ namespace SolemateKicks
             using (SolemateDataContext db = new SolemateDataContext())
             {
                 return db.ExecuteQuery<DiscrepancyRow>("EXEC dbo.usp_DelGetDiscrepancies {0}", deliveryId).ToList();
+            }
+        }
+
+        /// <summary>Header of one receiving report for printing (null if not found).</summary>
+        public static ReportHeaderRow GetReportHeader(string reportRef)
+        {
+            using (SolemateDataContext db = new SolemateDataContext())
+            {
+                return db.ExecuteQuery<ReportHeaderRow>("EXEC dbo.usp_DelGetReportHeader {0}", reportRef).FirstOrDefault();
+            }
+        }
+
+        public static List<ReportLineRow> GetReportLines(string reportRef)
+        {
+            using (SolemateDataContext db = new SolemateDataContext())
+            {
+                return db.ExecuteQuery<ReportLineRow>("EXEC dbo.usp_DelGetReportLines {0}", reportRef).ToList();
             }
         }
     }
