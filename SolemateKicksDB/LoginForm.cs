@@ -33,7 +33,7 @@ namespace SolemateKicks
 
             Label tagline = new Label
             {
-                Text = "REQUISITION SYSTEM",
+                Text = "STOCK MANAGEMENT SYSTEM",
                 ForeColor = Theme.White,
                 BackColor = Theme.Red,
                 Font = new Font("Segoe UI", 12f, FontStyle.Bold | FontStyle.Italic),
@@ -58,7 +58,7 @@ namespace SolemateKicks
 
             Label lblSub = new Label
             {
-                Text = "Sign in to create and manage stock requisitions.",
+                Text = "Sign in to manage stock, requisitions and deliveries.",
                 ForeColor = Theme.Muted,
                 AutoSize = true,
                 Location = new Point(53, 112)
@@ -84,15 +84,6 @@ namespace SolemateKicks
             lblError.AutoSize = false;
             lblError.Bounds = new Rectangle(53, 362, 340, 24);
 
-            Label lblHint = new Label
-            {
-                Text = "Demo accounts:  cashier / cashier123   |   manager / manager123   |   head / head123",
-                ForeColor = Theme.Muted,
-                Font = Theme.FontSmall,
-                AutoSize = false,
-                Bounds = new Rectangle(53, 410, 380, 36)
-            };
-
             right.Controls.Add(lblWelcome);
             right.Controls.Add(lblSub);
             right.Controls.Add(lblU);
@@ -101,7 +92,6 @@ namespace SolemateKicks
             right.Controls.Add(txtPass);
             right.Controls.Add(btnLogin);
             right.Controls.Add(lblError);
-            right.Controls.Add(lblHint);
 
             // Fill first, then the edge-docked panel (later-added controls are docked first)
             Controls.Add(right);
