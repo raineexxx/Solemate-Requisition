@@ -5,7 +5,6 @@
 --  requisition is closed when everything requested has been issued.
 --  Adds: Issuances + IssuanceItems, RequisitionItems.ReservedQty / IssuedQty,
 --        'Closed' requisition status, procedures usp_Iss...
---  Safe to run more than once.
 -- =====================================================================
 USE SolemateKicksDB;
 GO

@@ -2,7 +2,6 @@
 --  Solemate Sales module  (run AFTER 3_Inventory.sql)
 --  Adds: Products.ReservedQty, Sales + SaleItems tables, 3 procedures (usp_Sal...)
 --  Every sale deducts stock IMMEDIATELY (real-time) and is logged in StockMovements.
---  Safe to run more than once.
 -- =====================================================================
 USE SolemateKicksDB;
 GO
