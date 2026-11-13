@@ -21,9 +21,10 @@ namespace SolemateKicks
         public const string Approved = "Approved";
         public const string Rejected = "Rejected";
         public const string Cancelled = "Cancelled";
+        public const string Closed = "Closed";
 
         // used by the status filter on the main screen
-        public static readonly string[] Filter = { "All", Pending, Approved, Rejected, Cancelled };
+        public static readonly string[] Filter = { "All", Pending, Approved, Rejected, Cancelled, Closed };
     }
 
     public static class PasswordHelper

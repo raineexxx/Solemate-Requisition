@@ -45,7 +45,7 @@ namespace SolemateKicks
         private Label lblCount;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnRefresh, btnDetails;
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnSales, btnIssuance, btnRefresh, btnDetails;
         public MainForm()
         {
             Text = "Solemate - Requisition";
@@ -80,7 +80,7 @@ namespace SolemateKicks
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76f));   // header
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64f));   // toolbar
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112f));  // toolbar (two rows: actions + modules)
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));    // banner (0 = hidden)
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // content
 
@@ -126,12 +126,11 @@ namespace SolemateKicks
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                WrapContents = false,
+                WrapContents = true,   // row 1 = requisition actions, row 2 = module buttons (forced by SetFlowBreak below)
                 FlowDirection = FlowDirection.LeftToRight,
                 Padding = new Padding(8, 11, 0, 0)
             };
 
-            // widths are kept small enough that every button fits next to the "Show" filter (Cashier has the most buttons)
             btnNew = Theme.MakeButton("+ NEW REQUISITION", 170, true, OnNew);
             btnRevise = Theme.MakeButton("REVISE", 90, false, OnRevise);
             btnDetails = Theme.MakeButton("DETAILS", 100, false, OnDetails);
@@ -141,6 +140,8 @@ namespace SolemateKicks
             btnInventory = Theme.MakeButton("INVENTORY", 110, false, OnInventory);
             btnPurchasing = Theme.MakeButton("PURCHASING", 120, false, OnPurchasing);
             btnDelivery = Theme.MakeButton("DELIVERY", 100, false, OnDelivery);
+            btnSales = Theme.MakeButton("SALES", 90, false, OnSales);
+            btnIssuance = Theme.MakeButton("ISSUANCE", 100, false, OnIssuance);
             btnRefresh = Theme.MakeButton("REFRESH", 90, false, (s, e) => LoadData());
 
             bool isHead = _user.Role == Roles.Head;
@@ -156,12 +157,17 @@ namespace SolemateKicks
                 flow.Controls.Add(btnApprove);
                 flow.Controls.Add(btnReject);
             }
+            // end of row 1: the last action button starts a new row for the module buttons
+            flow.SetFlowBreak(isHead ? btnReject : btnCancel, true);
+
             flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnPurchasing);  // link to the Purchasing module (everyone can view, only the Manager can edit)
+            flow.Controls.Add(btnSales);       // Sales: stock is deducted when a sale is completed
+            flow.Controls.Add(btnIssuance);    // Issuance: reserve, issue and acknowledge stock for approved requisitions
             flow.Controls.Add(btnDelivery);    // link to the Delivery module (everyone can view, only the Manager can edit)
             flow.Controls.Add(btnRefresh);
 
-            foreach (Control c in flow.Controls) c.Margin = new Padding(3, 0, 3, 0);
+            foreach (Control c in flow.Controls) c.Margin = new Padding(3, 0, 3, 8);
 
             // status filter on the right
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 240 };
@@ -621,6 +627,24 @@ namespace SolemateKicks
                 f.ShowDialog(this);
             }
             LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+        }
+
+        private void OnSales(object sender, EventArgs e)
+        {
+            using (SalesForm f = new SalesForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadData();   // stock changed, so refresh the stock columns
+        }
+
+        private void OnIssuance(object sender, EventArgs e)
+        {
+            using (IssuanceForm f = new IssuanceForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadData();   // issued requisitions become Closed
         }
 
         private void OnPurchasing(object sender, EventArgs e)
