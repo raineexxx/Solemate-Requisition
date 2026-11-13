@@ -1,4 +1,4 @@
-
+﻿
 namespace SolemateKicks
 {
     partial class PurchasingForm

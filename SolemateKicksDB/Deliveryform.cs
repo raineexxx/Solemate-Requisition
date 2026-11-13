@@ -19,7 +19,7 @@ namespace SolemateKicks
     /// missing quantities stay outstanding for follow-up.
     /// Manager: new delivery, receive / inspect.  Everyone else: view only.
     /// </summary>
-    public class DeliveryForm : Form
+    public partial class DeliveryForm : Form
     {
         private readonly AppUser _user = Session.CurrentUser;
         private readonly bool _canEdit;

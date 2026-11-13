@@ -51,6 +51,9 @@
     <Compile Include="Deliveryform.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Deliveryform.Designer.cs">
+      <DependentUpon>Deliveryform.cs</DependentUpon>
+    </Compile>
     <Compile Include="Helper.cs" />
     <Compile Include="InputDialog.cs">
       <SubType>Form</SubType>
@@ -59,6 +62,10 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="InventoryService.cs" />
+    <Compile Include="IssuanceForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IssuanceService.cs" />
     <Compile Include="LoginForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -81,7 +88,14 @@
     <Compile Include="RequisitionForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Requisitionreviewdialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="RequisitionService.cs" />
+    <Compile Include="SalesForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SalesService.cs" />
     <Compile Include="Solemate.designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -126,8 +140,10 @@
     <Service Include="{3259AA49-8AA1-44D3-9025-A0B520596A8C}" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Database\10_Issuance.sql" />
     <Content Include="Database\6_Delivery.sql" />
     <Content Include="Database\7_DeliveryUpgrade.sql" />
+    <Content Include="Database\9_Sales.sql" />
     <Content Include="Database\9_Quotations.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
