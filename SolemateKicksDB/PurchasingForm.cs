@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Xml.Linq;
+
 
 // These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
@@ -65,7 +67,7 @@ namespace SolemateKicks
 
         private Control BuildHeader()
         {
-            Panel header = Theme.MakeHeader("Purchasing", "Purchase orders and suppliers");
+            Panel header = Theme.MakeHeader("Purchasing", "Quotations, purchase orders and suppliers");
 
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Theme.Red };
 
@@ -157,7 +159,8 @@ namespace SolemateKicks
 
     // ======================================================================
     //  Tab 1: purchase orders
-    //  Head / Manager: create a purchase order.  Everyone else: view only.
+    //  Head (who is also the Owner and the purchasing officer): get quotations, create and send a purchase order.
+    //  Everyone else: view only.  (The Manager receives the delivery in the Delivery module.)
     // ======================================================================
     public class PurchaseOrdersPanel : UserControl
     {
@@ -165,11 +168,11 @@ namespace SolemateKicks
         private readonly bool _canManage;
 
         private DataGridView grid;
-        private Button btnNew;
+        private Button btnNew, btnSend;
 
         public PurchaseOrdersPanel()
         {
-            _canManage = _user != null && (_user.Role == Roles.Head || _user.Role == Roles.Manager);
+            _canManage = _user != null && _user.Role == Roles.Head;
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Canvas;
@@ -210,9 +213,14 @@ namespace SolemateKicks
             };
 
             btnNew = Theme.MakeButton("+ NEW PO", 130, true, OnNew);
+            btnSend = Theme.MakeButton("SEND PO TO SUPPLIER", 210, false, OnSend);
             Button btnRefresh = Theme.MakeButton("REFRESH", 100, false, OnRefresh);
 
-            if (_canManage) flow.Controls.Add(btnNew);
+            if (_canManage)
+            {
+                flow.Controls.Add(btnNew);
+                flow.Controls.Add(btnSend);
+            }
             flow.Controls.Add(btnRefresh);
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
             return flow;
@@ -224,12 +232,14 @@ namespace SolemateKicks
 
             grid = new DataGridView();
             Theme.StyleGrid(grid);
-            Theme.AddColumn(grid, "colPo", "PO NO.", "PoNo", 18);
-            Theme.AddColumn(grid, "colDate", "DATE", "DateCreated", 16, "g");
-            Theme.AddColumn(grid, "colSupplier", "SUPPLIER", "Supplier", 24);
-            Theme.AddColumn(grid, "colReq", "REQUISITION", "RequisitionRef", 18);
-            Theme.AddColumn(grid, "colStatus", "STATUS", "Status", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
-            Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 14, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            Theme.AddColumn(grid, "colPo", "PO NO.", "PoNo", 14);
+            Theme.AddColumn(grid, "colDate", "DATE", "DateCreated", 13, "g");
+            Theme.AddColumn(grid, "colSupplier", "SUPPLIER", "Supplier", 20);
+            Theme.AddColumn(grid, "colReq", "REQUISITION", "RequisitionRef", 14);
+            Theme.AddColumn(grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 14);
+            Theme.AddColumn(grid, "colSent", "SENT TO SUPPLIER", "SentText", 14, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(grid, "colStatus", "STATUS", "Status", 9, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 13, "N2", true, DataGridViewContentAlignment.MiddleRight);
 
             grid.CellFormatting += OnCellFormatting;
 
@@ -296,6 +306,7 @@ namespace SolemateKicks
             LoadData();
         }
 
+        // New PO: choose an approved requisition, record the supplier quotations, create the PO from the lowest one
         private void OnNew(object sender, EventArgs e)
         {
             try
@@ -316,12 +327,53 @@ namespace SolemateKicks
                     return;
                 }
 
-                using (NewPoDialog dlg = new NewPoDialog(reqs, suppliers))
+                using (QuotationsDialog dlg = new QuotationsDialog(reqs, suppliers, _user))
                 {
-                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                    PurchasingService.CreateOrder(dlg.RequisitionId, dlg.SupplierIdValue, _user);
-                    LoadData();
+                    dlg.ShowDialog(this);   // the dialog creates the PO itself when CREATE PO is pressed
                 }
+                LoadData();
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        // Send PO: make the written purchase order, open an email to the supplier, then record that it was sent
+        private void OnSend(object sender, EventArgs e)
+        {
+            PurchaseOrderRow po = Selected;
+            if (po == null)
+            {
+                MessageBox.Show(this, "Select a purchase order first.", "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (po.Status != "Ordered")
+            {
+                MessageBox.Show(this, "Only a purchase order with status Ordered can be sent.",
+                    "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            try
+            {
+                PurchaseOrderHeader header = PurchasingService.GetOrderHeader(po.PurchaseOrderId);
+                List<PurchaseOrderItemRow> items = PurchasingService.GetOrderItems(po.PurchaseOrderId);
+
+                string path = PoDocument.Save(header, items, _user.FullName);
+                PoDocument.Open(path);
+
+                if (header.SupplierEmail.Length > 0)
+                    PoDocument.OpenEmail(header, _user.FullName);
+
+                string msg = "The written purchase order was saved here:\r\n" + path + "\r\n\r\n"
+                    + (header.SupplierEmail.Length > 0
+                        ? "A new email to " + header.SupplierEmail + " was opened. Print the order to PDF from the browser and attach it to the email, then send it.\r\n\r\n"
+                        : "This supplier has no email address. Print the order and send it another way.\r\n\r\n")
+                    + "Was the purchase order sent to the supplier?";
+
+                if (MessageBox.Show(this, msg, "Send purchase order", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+
+                PurchasingService.MarkOrderSent(po.PurchaseOrderId, _user);
+                LoadData();
             }
             catch (Exception ex) { ShowError(ex); }
         }
@@ -329,74 +381,6 @@ namespace SolemateKicks
         private void ShowError(Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    // ======================================================================
-    //  New purchase order: pick an approved requisition + a supplier
-    // ======================================================================
-    public class NewPoDialog : Form
-    {
-        private readonly ComboBox _req = new ComboBox();
-        private readonly ComboBox _supplier = new ComboBox();
-
-        public int RequisitionId { get { return ((ApprovedRequisitionRow)_req.SelectedItem).RequisitionId; } }
-        public int SupplierIdValue { get { return ((SupplierRow)_supplier.SelectedItem).SupplierId; } }
-
-        public NewPoDialog(List<ApprovedRequisitionRow> reqs, List<SupplierRow> suppliers)
-        {
-            Text = "New purchase order";
-            ClientSize = new Size(520, 250);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterParent;
-            BackColor = Theme.White;
-            Font = Theme.FontBody;
-
-            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 8, BackColor = Theme.Red });
-
-            Controls.Add(new Label { Text = "Requisition", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 34) });
-            _req.DropDownStyle = ComboBoxStyle.DropDownList;
-            _req.Location = new Point(140, 30);
-            _req.Width = 360;
-            foreach (ApprovedRequisitionRow r in reqs) _req.Items.Add(r);   // label comes from ApprovedRequisitionRow.ToString()
-            _req.SelectedIndex = 0;
-            Controls.Add(_req);
-
-            Controls.Add(new Label { Text = "Supplier", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 84) });
-            _supplier.DropDownStyle = ComboBoxStyle.DropDownList;
-            _supplier.Location = new Point(140, 80);
-            _supplier.Width = 360;
-            foreach (SupplierRow s in suppliers) _supplier.Items.Add(s);    // label comes from SupplierRow.ToString()
-            _supplier.SelectedIndex = 0;
-            Controls.Add(_supplier);
-
-            Controls.Add(new Label
-            {
-                Text = "All items of the requisition are copied into the purchase order at their current price.",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Muted,
-                AutoSize = true,
-                Location = new Point(20, 124)
-            });
-
-            Button save = Theme.MakeButton("CREATE PO", 130, true, OnSave);
-            save.Location = new Point(370, 190);
-            Button cancel = Theme.MakeButton("CANCEL", 110, false, null);
-            cancel.DialogResult = DialogResult.Cancel;
-            cancel.Location = new Point(250, 190);
-
-            Controls.Add(save);
-            Controls.Add(cancel);
-            AcceptButton = save;
-            CancelButton = cancel;
-        }
-
-        private void OnSave(object sender, EventArgs e)
-        {
-            DialogResult = DialogResult.OK;
         }
     }
 }

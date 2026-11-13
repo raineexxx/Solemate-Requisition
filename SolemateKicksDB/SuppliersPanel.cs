@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-// This alias prevents an "ambiguous reference" error with System.Windows.Forms.VisualStyles
+// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
+using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
     /// <summary>
-    /// Tab 2 of the Purchasing page: suppliers (name, address, email).
-    /// Head / Manager: add, edit, delete.  Everyone else: view only.
+    /// Tab 2 of the Purchasing page: suppliers (name, address, email, country) and their order history.
+    /// Head: add, edit, delete.  Everyone else: view only.
     /// </summary>
     public class SuppliersPanel : UserControl
     {
@@ -18,11 +19,11 @@ namespace SolemateKicks
         private readonly bool _canManage;
 
         private DataGridView grid;
-        private Button btnAdd, btnEdit, btnDelete;
+        private Button btnAdd, btnEdit, btnDelete, btnHistory;
 
         public SuppliersPanel()
         {
-            _canManage = _user != null && (_user.Role == Roles.Head || _user.Role == Roles.Manager);
+            _canManage = _user != null && _user.Role == Roles.Head;
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Canvas;
@@ -68,6 +69,7 @@ namespace SolemateKicks
             btnAdd = Theme.MakeButton("+ ADD SUPPLIER", 160, true, OnAdd);
             btnEdit = Theme.MakeButton("EDIT", 100, false, OnEdit);
             btnDelete = Theme.MakeButton("DELETE", 100, false, OnDelete);
+            btnHistory = Theme.MakeButton("ORDER HISTORY", 160, false, OnHistory);
             Button btnRefresh = Theme.MakeButton("REFRESH", 100, false, OnRefresh);
 
             if (_canManage)
@@ -76,6 +78,7 @@ namespace SolemateKicks
                 flow.Controls.Add(btnEdit);
                 flow.Controls.Add(btnDelete);
             }
+            flow.Controls.Add(btnHistory);
             flow.Controls.Add(btnRefresh);
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
             return flow;
@@ -88,8 +91,9 @@ namespace SolemateKicks
             grid = new DataGridView();
             Theme.StyleGrid(grid);
             Theme.AddColumn(grid, "colName", "SUPPLIER NAME", "SupplierName", 28);
-            Theme.AddColumn(grid, "colAddress", "ADDRESS", "Address", 42);
-            Theme.AddColumn(grid, "colEmail", "EMAIL", "Email", 30);
+            Theme.AddColumn(grid, "colCountry", "COUNTRY", "Country", 12);
+            Theme.AddColumn(grid, "colAddress", "ADDRESS", "Address", 34);
+            Theme.AddColumn(grid, "colEmail", "EMAIL", "Email", 26);
 
             grid.SelectionChanged += OnSelectionChanged;
             grid.CellDoubleClick += OnCellDoubleClick;
@@ -113,10 +117,11 @@ namespace SolemateKicks
 
         private void SetButtons()
         {
-            if (btnEdit == null || btnDelete == null) return;
+            if (btnEdit == null || btnDelete == null || btnHistory == null) return;
             bool has = Selected != null;
             btnEdit.Enabled = _canManage && has;
             btnDelete.Enabled = _canManage && has;
+            btnHistory.Enabled = has;
         }
 
         public void LoadData()
@@ -175,7 +180,7 @@ namespace SolemateKicks
 
                 try
                 {
-                    int id = PurchasingService.SaveSupplier(0, dlg.NameValue, dlg.AddressValue, dlg.EmailValue, _user);
+                    int id = PurchasingService.SaveSupplier(0, dlg.NameValue, dlg.AddressValue, dlg.EmailValue, dlg.CountryValue, _user);
                     LoadDataAndSelect(id);
                 }
                 catch (Exception ex) { ShowError(ex); }
@@ -193,7 +198,7 @@ namespace SolemateKicks
 
                 try
                 {
-                    PurchasingService.SaveSupplier(sel.SupplierId, dlg.NameValue, dlg.AddressValue, dlg.EmailValue, _user);
+                    PurchasingService.SaveSupplier(sel.SupplierId, dlg.NameValue, dlg.AddressValue, dlg.EmailValue, dlg.CountryValue, _user);
                     LoadDataAndSelect(sel.SupplierId);
                 }
                 catch (Exception ex) { ShowError(ex); }
@@ -218,6 +223,21 @@ namespace SolemateKicks
             catch (Exception ex) { ShowError(ex); }
         }
 
+        private void OnHistory(object sender, EventArgs e)
+        {
+            SupplierRow sel = Selected;
+            if (sel == null) return;
+
+            try
+            {
+                using (SupplierHistoryDialog dlg = new SupplierHistoryDialog(sel, PurchasingService.GetSupplierHistory(sel.SupplierId)))
+                {
+                    dlg.ShowDialog(this);
+                }
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
         private void ShowError(Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -232,17 +252,19 @@ namespace SolemateKicks
         private readonly TextBox _name = new TextBox();
         private readonly TextBox _address = new TextBox();
         private readonly TextBox _email = new TextBox();
+        private readonly ComboBox _country = new ComboBox();
 
         public string NameValue { get { return _name.Text.Trim(); } }
         public string AddressValue { get { return _address.Text.Trim(); } }
         public string EmailValue { get { return _email.Text.Trim(); } }
+        public string CountryValue { get { return _country.Text.Trim(); } }
 
         public SupplierDialog(SupplierRow existing)
         {
             bool isNew = existing == null;
 
             Text = isNew ? "Add supplier" : "Edit supplier";
-            ClientSize = new Size(520, 320);
+            ClientSize = new Size(520, 380);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -275,18 +297,27 @@ namespace SolemateKicks
             _email.Width = 350;
             Controls.Add(_email);
 
+            Controls.Add(new Label { Text = "Country", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 224) });
+            _country.DropDownStyle = ComboBoxStyle.DropDown;    // pick a suggestion or type another country
+            _country.MaxLength = 50;
+            _country.Items.AddRange(new object[] { "United Kingdom", "Vietnam" });
+            _country.Location = new Point(150, 220);
+            _country.Width = 350;
+            Controls.Add(_country);
+
             if (!isNew)
             {
                 _name.Text = existing.SupplierName;
                 _address.Text = existing.Address;
                 _email.Text = existing.Email;
+                _country.Text = existing.Country;
             }
 
             Button save = Theme.MakeButton("SAVE", 130, true, OnSave);
-            save.Location = new Point(370, 262);
+            save.Location = new Point(370, 322);
             Button cancel = Theme.MakeButton("CANCEL", 110, false, null);
             cancel.DialogResult = DialogResult.Cancel;
-            cancel.Location = new Point(250, 262);
+            cancel.Location = new Point(250, 322);
 
             Controls.Add(save);
             Controls.Add(cancel);
@@ -298,6 +329,8 @@ namespace SolemateKicks
             string problem = null;
             if (NameValue.Length == 0)
                 problem = "Supplier name is required.";
+            else if (CountryValue.Length == 0)
+                problem = "Supplier country is required.";
             else if (EmailValue.Length > 0 && (EmailValue.IndexOf('@') < 1 || EmailValue.IndexOf('.') < 0))
                 problem = "Please enter a valid email address, for example name@company.com.";
 
@@ -307,6 +340,57 @@ namespace SolemateKicks
                 return;
             }
             DialogResult = DialogResult.OK;
+        }
+    }
+
+    // ======================================================================
+    //  Order history of one supplier (view only)
+    // ======================================================================
+    public class SupplierHistoryDialog : Form
+    {
+        public SupplierHistoryDialog(SupplierRow supplier, List<PurchaseOrderRow> orders)
+        {
+            Text = "Order history - " + supplier.SupplierName;
+            ClientSize = new Size(860, 460);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Theme.White;
+            Font = Theme.FontBody;
+
+            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 8, BackColor = Theme.Red });
+
+            Controls.Add(new Label
+            {
+                Text = orders.Count == 0 ? "No purchase orders for this supplier yet."
+                                         : orders.Count + " purchase order(s) for " + supplier.SupplierName,
+                Font = Theme.FontBold,
+                AutoSize = true,
+                Location = new Point(20, 24)
+            });
+
+            Panel gridHost = new Panel { Location = new Point(20, 54), Size = new Size(820, 340) };
+            DataGridView grid = new DataGridView();
+            Theme.StyleGrid(grid);
+            Theme.AddColumn(grid, "colPo", "PO NO.", "PoNo", 16);
+            Theme.AddColumn(grid, "colDate", "DATE", "DateCreated", 16, "g");
+            Theme.AddColumn(grid, "colReq", "REQUISITION", "RequisitionRef", 16);
+            Theme.AddColumn(grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 18);
+            Theme.AddColumn(grid, "colSent", "SENT", "SentText", 14, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(grid, "colStatus", "STATUS", "Status", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 14, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            grid.Dock = DockStyle.Fill;
+            grid.DataSource = orders;
+            gridHost.Controls.Add(grid);
+            Controls.Add(gridHost);
+
+            Button close = Theme.MakeButton("CLOSE", 110, false, null);
+            close.DialogResult = DialogResult.Cancel;
+            close.Location = new Point(730, 410);
+            Controls.Add(close);
+            CancelButton = close;
         }
     }
 }
