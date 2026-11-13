@@ -3,16 +3,12 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
 using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
-    /// <summary>
-    /// Tab 2 of the Purchasing page: suppliers (name, address, email, country) and their order history.
-    /// Head: add, edit, delete.  Everyone else: view only.
-    /// </summary>
+  
     public class SuppliersPanel : UserControl
     {
         private readonly AppUser _user = Session.CurrentUser;

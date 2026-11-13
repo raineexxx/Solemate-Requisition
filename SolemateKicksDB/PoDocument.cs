@@ -8,13 +8,8 @@ using System.Text;
 
 namespace SolemateKicks
 {
-    /// <summary>
-    /// Builds the written purchase order (an HTML page that opens in the browser and can be printed or saved as PDF)
-    /// and opens a new email to the supplier. This replaces phone-only orders.
-    /// </summary>
     public static class PoDocument
     {
-        /// <summary>Saves the written PO under Documents\Solemate Purchase Orders and returns the file path.</summary>
         public static string Save(PurchaseOrderHeader h, List<PurchaseOrderItemRow> items, string preparedBy)
         {
             string folder = Path.Combine(

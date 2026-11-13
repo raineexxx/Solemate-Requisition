@@ -149,10 +149,6 @@ namespace SolemateKicks
             }
         }
 
-        /// <summary>
-        /// Creates a PO from an approved requisition and the quotation of the chosen supplier (Head only, needs at least
-        /// two quotations; checked in SQL). Returns the new PurchaseOrderId.
-        /// </summary>
         public static int CreateOrder(int requisitionId, int supplierId, AppUser user)
         {
             using (SolemateDataContext db = new SolemateDataContext())

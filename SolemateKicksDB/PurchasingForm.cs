@@ -5,16 +5,12 @@ using System.Windows.Forms;
 using System.Xml.Linq;
 
 
-// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
 using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
-    /// <summary>
-    /// Purchasing page with two tabs in the same window: PURCHASE ORDERS and SUPPLIERS.
-    /// Receiving the goods into stock is the Delivery module's job (it comes after purchasing).
-    /// </summary>
+ 
     public partial class PurchasingForm : Form
     {
         private readonly AppUser _user = Session.CurrentUser;

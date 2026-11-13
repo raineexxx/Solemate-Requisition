@@ -144,7 +144,7 @@
     <Content Include="Database\6_Delivery.sql" />
     <Content Include="Database\7_DeliveryUpgrade.sql" />
     <Content Include="Database\9_Sales.sql" />
-    <Content Include="Database\9_Quotations.sql" />
+    <Content Include="Database\10_Quotations.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

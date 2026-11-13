@@ -1,29 +1,7 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Purchasing module - upgrade to follow section 3.3 (Purchasing)
 
-   RUN THIS SCRIPT LAST (after 4_Purchasing.sql, 5_PurchasingRoles.sql and 8_Suppliers.sql).
-   It replaces usp_PurCreateOrder, usp_PurReceiveOrder, usp_SupGetAll, usp_SupSave and
-   usp_SupDelete, so running 4, 5 or 8 again afterwards would undo it. Safe to run more than once.
-
-   What it does
-   1. Roles: the Head (who is also the Owner and the purchasing officer) creates and sends POs,
-      manages suppliers and records quotations. The Manager receives the delivery.
-   2. Supplier quotations per approved requisition, compared by total; the lowest is the default.
-      A PO can only be created from a supplier that has a quotation, using the QUOTED prices,
-      and only when at least two quotations were collected.
-   3. Payment terms are kept on the quotation and copied to the PO.
-   4. A PO records when it was sent to the supplier (written PO instead of a phone order).
-   5. Suppliers get a Country, and each supplier has an order history.
-
-   Quotation prices are compared as entered, so enter every quotation in the same currency
-   (PHP, the currency of the PO totals).
-   ===================================================================== */
-
-/* ---------------- PRODUCT LABEL VIEW ----------------
-   The product name column is found automatically (ProductName, Name or Description). */
 DECLARE @col sysname =
     CASE WHEN COL_LENGTH(N'dbo.Products', N'ProductName') IS NOT NULL THEN N'ProductName'
          WHEN COL_LENGTH(N'dbo.Products', N'Name')        IS NOT NULL THEN N'Name'

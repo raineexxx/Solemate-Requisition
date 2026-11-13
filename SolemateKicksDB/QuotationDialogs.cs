@@ -4,19 +4,12 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
-// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
 using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
-    // ======================================================================
-    //  New purchase order, step by step (replaces the old "pick any supplier" dialog):
-    //    1. pick an approved requisition
-    //    2. record the quotation of each supplier (UK and Vietnam)
-    //    3. the lowest total is selected; CREATE PO builds the PO from that quotation
-    //  Head only (the Head is also the Owner and the purchasing officer).
-    // ======================================================================
+   
     public class QuotationsDialog : Form
     {
         private readonly AppUser _user;
