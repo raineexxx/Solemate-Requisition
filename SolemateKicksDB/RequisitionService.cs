@@ -13,6 +13,17 @@ namespace SolemateKicks
     /// generated result rows into the simple classes the forms use (see ViewModels.cs).
     /// Errors raised by THROW in SQL arrive here as exceptions whose Message is the SQL text.
     /// </summary>
+    /// <summary>One row of usp_GetUserForLogin.</summary>
+    public class LoginRow
+    {
+        public int UserId { get; set; }
+        public string Username { get; set; }
+        public string PasswordHash { get; set; }
+        public string FullName { get; set; }
+        public string Role { get; set; }
+        public string Branch { get; set; }
+    }
+
     public static class RequisitionService
     {
         // ==================================================================
@@ -20,20 +31,29 @@ namespace SolemateKicks
         // ==================================================================
         public static AppUser Authenticate(string username, string password)
         {
-            string hash = PasswordHelper.Hash(password);
             using (SolemateDataContext db = new SolemateDataContext())
             {
-                var r = db.usp_Authenticate(username, hash).ToList().FirstOrDefault();
-                if (r == null) return null;
+                LoginRow u = db.ExecuteQuery<LoginRow>("EXEC dbo.usp_GetUserForLogin {0}", username ?? string.Empty).FirstOrDefault();
+                if (u == null) return null;
+
+                bool needsUpgrade;
+                if (!PasswordHelper.Verify(password, u.PasswordHash, out needsUpgrade)) return null;
+
+                if (needsUpgrade)
+                {
+                    // old SHA-256 password: store a salted hash instead (login still works if this fails)
+                    try { db.ExecuteCommand("EXEC dbo.usp_SetPasswordHash {0}, {1}", u.UserId, PasswordHelper.HashSalted(password)); }
+                    catch { }
+                }
 
                 return new AppUser
                 {
-                    UserId = Convert.ToInt32(r.UserId),
-                    Username = r.Username,
-                    PasswordHash = r.PasswordHash,
-                    FullName = r.FullName,
-                    Role = r.Role,
-                    Branch = r.Branch
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    PasswordHash = string.Empty,   // never keep the hash in memory
+                    FullName = u.FullName,
+                    Role = u.Role,
+                    Branch = u.Branch
                 };
             }
         }
