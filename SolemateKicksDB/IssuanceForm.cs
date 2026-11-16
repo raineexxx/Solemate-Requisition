@@ -323,8 +323,7 @@ namespace SolemateKicks
             {
                 IssueResult res = IssuanceService.Issue(r.RequisitionId, _user);
                 string msg = "Issuance slip " + res.IssueNo + " created. Stock deducted.";
-                msg += res.FullyIssued ? "\r\nRequisition " + r.RefNo + " is fully issued. It closes when the branch signs the acknowledgment."
-                                       : "\r\nRequisition " + r.RefNo + " is only partly issued and stays open for the remaining items.";
+                msg += res.Closed ? "\r\nRequisition " + r.RefNo + " is fully issued. It closes when the branch signs the acknowledgment." : "\r\nRequisition " + r.RefNo + " is only partly issued and stays open for the remaining items.";
                 MessageBox.Show(this, msg, "Issued", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadAll();
                 tabs.SelectedIndex = 1;

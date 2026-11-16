@@ -38,7 +38,7 @@ namespace SolemateKicks
     public class IssueResult
     {
         public string IssueNo { get; set; }
-        public bool FullyIssued { get; set; }
+        public bool Closed { get; set; }
     }
 
     public class SlipRow
