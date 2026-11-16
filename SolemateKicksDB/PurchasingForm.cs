@@ -10,10 +10,8 @@ using ComboBox = System.Windows.Forms.ComboBox;
 namespace SolemateKicks
 {
     /// <summary>
-    /// Purchasing page with four tabs: PURCHASE REQUISITIONS, PURCHASE ORDERS, QUOTATIONS and SUPPLIERS.
-    /// Paper 3.3: the system creates a purchase requisition for the shortage only -> the Head checks the budget and approves ->
-    /// the manager compares supplier quotations (lowest price) and creates the purchase order -> it is sent to the
-    /// supplier -> the Delivery module receives and inspects the goods.
+    /// Purchasing page with two tabs in the same window: PURCHASE ORDERS and SUPPLIERS.
+    /// Receiving the goods into stock is the Delivery module's job (it comes after purchasing).
     /// </summary>
     public partial class PurchasingForm : Form
     {
@@ -70,7 +68,7 @@ namespace SolemateKicks
 
         private Control BuildHeader()
         {
-            Panel header = Theme.MakeHeader("Purchasing", "Purchase orders, quotations and suppliers");
+            Panel header = Theme.MakeHeader("Purchasing", "Quotations, purchase orders and suppliers");
 
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Theme.Red };
 
@@ -189,8 +187,8 @@ namespace SolemateKicks
 
     // ======================================================================
     //  Tab 1: purchase orders
-    //  Manager (purchasing work): create the PO from an approved purchase requisition (cheapest quotation) and send it.
-    //  Head / Manager can cancel.   Everyone: view, print, e-mail.
+    //  Head (who is also the Owner and the purchasing officer): get quotations, create and send a purchase order.
+    //  Everyone else: view only.  (The Manager receives the delivery in the Delivery module.)
     // ======================================================================
     public class PurchaseOrdersPanel : UserControl
     {
@@ -410,16 +408,15 @@ namespace SolemateKicks
             LoadData();
         }
 
+        // New PO: choose an approved requisition, record the supplier quotations, create the PO from the lowest one
         private void OnNew(object sender, EventArgs e)
         {
             try
             {
-                List<ApprovedRequisitionRow> reqs = PurchasingService.GetApprovedRequisitions();
-                if (reqs.Count == 0)
+                List<PendingItemRow> pending = PurchasingService.GetPendingItems();
+                if (pending.Count == 0)
                 {
-                    MessageBox.Show(this, "No purchase requisition is waiting for a purchase order.\r\n\r\n" +
-                        "The system creates a purchase requisition when an approved requisition is short on stock. " +
-                        "The Head must approve its budget (PURCHASE REQUISITIONS tab) before a PO can be made.",
+                    MessageBox.Show(this, "There are no approved requisitions waiting for a purchase order.",
                         "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -432,15 +429,10 @@ namespace SolemateKicks
                     return;
                 }
 
-                // record the supplier quotations of the requisition (at least two), then create the PO from the chosen one
-                bool created;
                 using (QuotationsDialog dlg = new QuotationsDialog(reqs, suppliers, _user))
                 {
-                    created = dlg.ShowDialog(this) == DialogResult.OK;   // the dialog creates the PO itself when CREATE PO is pressed
+                    dlg.ShowDialog(this);   // the dialog creates the PO itself when CREATE PO is pressed
                 }
-                if (created)
-                    MessageBox.Show(this, "Purchase order created for the shortage only, priced from the chosen quotation.\r\nIts budget was already approved by the Head. You can now send it to the supplier.",
-                        "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadData();
             }
             catch (Exception ex) { ShowError(ex); }

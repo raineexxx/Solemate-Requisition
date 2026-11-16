@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
+// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
 using ComboBox = System.Windows.Forms.ComboBox;
 
@@ -200,23 +201,30 @@ namespace SolemateKicks
     }
 
     // ======================================================================
-    //  Enter (or update) the quotation of one supplier: unit price for every requisition item + payment terms
+    //  New purchase order: the Head picks a supplier, then ticks the items to order from any approved request
+    //  and types the quantity of each. One PO = one supplier, and may mix items of several requests.
+    //  (The file keeps its old name so the project file does not change.)
     // ======================================================================
-    public class QuotationEntryDialog : Form
+    public class NewPoDialog : Form
     {
         private readonly int _requisitionId;
         private readonly List<ReqQuotationRow> _existing;
         private readonly List<SupplierRow> _all;
         private readonly ComboBox _supplier = new ComboBox();
+        private readonly ComboBox _filter = new ComboBox();
         private readonly TextBox _terms = new TextBox();
         private readonly DataGridView _grid = new DataGridView();
         private readonly Label _total = new Label();
-        private BindingList<QuotationItemRow> _items = new BindingList<QuotationItemRow>();
-        private bool _loading;
+        private BindingList<PendingItemRow> _view;
 
         public int SupplierIdValue { get { return ((SupplierRow)_supplier.SelectedItem).SupplierId; } }
         public string PaymentTermsValue { get { return _terms.Text.Trim(); } }
-        public List<QuotationItemRow> ItemsValue { get { return new List<QuotationItemRow>(_items); } }
+
+        /// <summary>The ticked items with their quantities (across all requests, not only the ones shown).</summary>
+        public List<PendingItemRow> SelectedItems
+        {
+            get { return _all.FindAll(delegate (PendingItemRow r) { return r.Selected && r.OrderQty > 0; }); }
+        }
 
         public QuotationEntryDialog(int requisitionId, List<SupplierRow> suppliers, List<ReqQuotationRow> existing, int preselectSupplierId)
         {
@@ -224,8 +232,8 @@ namespace SolemateKicks
             _existing = existing;
             _all = suppliers;
 
-            Text = "Supplier quotation";
-            ClientSize = new Size(660, 540);
+            Text = "New purchase order";
+            ClientSize = new Size(1000, 640);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -238,19 +246,26 @@ namespace SolemateKicks
 
             Controls.Add(new Label { Text = "Supplier", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 30) });
             _supplier.DropDownStyle = ComboBoxStyle.DropDownList;
-            _supplier.Location = new Point(140, 26);
-            _supplier.Width = 500;
+            _supplier.Location = new Point(130, 26);
+            _supplier.Width = 400;
             foreach (SupplierRow s in suppliers) _supplier.Items.Add(s);    // label comes from SupplierRow.ToString()
+            _supplier.SelectedIndex = 0;
             Controls.Add(_supplier);
 
-            Controls.Add(new Label { Text = "Payment terms", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 72) });
+            Controls.Add(new Label { Text = "Payment terms", Font = Theme.FontBold, AutoSize = true, Location = new Point(560, 30) });
             _terms.MaxLength = 100;
             _terms.BorderStyle = BorderStyle.FixedSingle;
-            _terms.Location = new Point(140, 68);
-            _terms.Width = 500;
+            _terms.Location = new Point(680, 26);
+            _terms.Width = 300;
             Controls.Add(_terms);
 
-            Controls.Add(new Label
+            Controls.Add(new Label { Text = "Show request", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 72) });
+            _filter.DropDownStyle = ComboBoxStyle.DropDownList;
+            _filter.Location = new Point(130, 68);
+            _filter.Width = 400;
+            _filter.Items.Add(AllRequests);
+            List<string> seen = new List<string>();
+            foreach (PendingItemRow r in _all)
             {
                 Text = "Enter the unit price quoted for each item to buy, in PHP (the price list is suggested when there is no quotation yet).",
                 Font = Theme.FontSmall,
@@ -259,16 +274,15 @@ namespace SolemateKicks
                 Location = new Point(20, 108)
             });
 
-            Panel gridHost = new Panel { Location = new Point(20, 132), Size = new Size(620, 300) };
+            Panel gridHost = new Panel { Location = new Point(20, 110), Size = new Size(960, 430) };
             Theme.StyleGrid(_grid);
             _grid.AutoGenerateColumns = false;
             _grid.ReadOnly = false;
             _grid.AllowUserToAddRows = false;
             _grid.AllowUserToDeleteRows = false;
-            _grid.EditMode = DataGridViewEditMode.EditOnEnter;
             _grid.Dock = DockStyle.Fill;
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            _grid.Columns.Add(new DataGridViewCheckBoxColumn
             {
                 Name = "colItem",
                 HeaderText = "ITEM",
@@ -309,7 +323,8 @@ namespace SolemateKicks
             line.DefaultCellStyle.Format = "N2";
             _grid.Columns.Add(line);
 
-            _grid.CellEndEdit += delegate { _grid.Invalidate(); UpdateTotal(); };
+            _grid.CurrentCellDirtyStateChanged += OnDirty;
+            _grid.CellValueChanged += delegate { _grid.Invalidate(); UpdateTotal(); };
             _grid.DataError += OnDataError;
             gridHost.Controls.Add(_grid);
             Controls.Add(gridHost);
@@ -317,34 +332,51 @@ namespace SolemateKicks
             _total.Font = Theme.FontBold;
             _total.AutoSize = false;
             _total.TextAlign = ContentAlignment.MiddleRight;
-            _total.Bounds = new Rectangle(340, 440, 300, 28);
+            _total.Bounds = new Rectangle(560, 548, 420, 28);
             Controls.Add(_total);
 
-            Button save = Theme.MakeButton("SAVE QUOTATION", 170, true, OnSave);
-            save.Location = new Point(470, 488);
+            Controls.Add(new Label
+            {
+                Text = "Tick the items to order and type the quantity. Items you leave out stay available for the next purchase order.",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Muted,
+                AutoSize = true,
+                Location = new Point(20, 552)
+            });
+
+            Button save = Theme.MakeButton("CREATE PO", 150, true, OnSave);
+            save.Location = new Point(830, 590);
             Button cancel = Theme.MakeButton("CANCEL", 110, false, null);
             cancel.DialogResult = DialogResult.Cancel;
-            cancel.Location = new Point(350, 488);
+            cancel.Location = new Point(700, 590);
             Controls.Add(save);
             Controls.Add(cancel);
             CancelButton = cancel;
 
-            _supplier.SelectedIndexChanged += delegate { LoadItems(); };
-            if (_supplier.Items.Count > 0)
-            {
-                int idx = 0;
-                for (int i = 0; i < _supplier.Items.Count; i++)
-                    if (((SupplierRow)_supplier.Items[i]).SupplierId == preselectSupplierId) { idx = i; break; }
-                _supplier.SelectedIndex = idx;
-            }
+            _filter.SelectedIndexChanged += delegate { ApplyFilter(); };
+            ApplyFilter();
         }
 
-        // loads the requisition items with the prices this supplier already quoted (if any)
-        private void LoadItems()
+        private static DataGridViewTextBoxColumn TextCol(string name, string header, string prop, float weight, bool readOnly, bool right)
         {
-            if (_loading || _supplier.SelectedItem == null) return;
-            _loading = true;
-            try
+            DataGridViewTextBoxColumn c = new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = header,
+                DataPropertyName = prop,
+                ReadOnly = readOnly,
+                FillWeight = weight
+            };
+            if (right) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            return c;
+        }
+
+        // shows only the items of the chosen request (the ticks of hidden items are kept)
+        private void ApplyFilter()
+        {
+            _grid.EndEdit();
+            string pick = _filter.SelectedItem as string;
+            List<PendingItemRow> rows = _all.FindAll(delegate (PendingItemRow r)
             {
                 int supplierId = SupplierIdValue;
                 _items = new BindingList<QuotationItemRow>(PurchasingService.GetQuotationItems(_requisitionId, supplierId));
@@ -355,26 +387,46 @@ namespace SolemateKicks
                 foreach (ReqQuotationRow q in _existing)
                     if (q.SupplierId == supplierId) { _terms.Text = q.PaymentTerms; break; }
 
-                UpdateTotal();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, ex.Message, "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally { _loading = false; }
+        private void OnTickAll(object sender, EventArgs e)
+        {
+            _grid.EndEdit();
+            foreach (PendingItemRow r in _view) r.Selected = true;
+            _grid.Refresh();
+            UpdateTotal();
+        }
+
+        private void OnClear(object sender, EventArgs e)
+        {
+            _grid.EndEdit();
+            foreach (PendingItemRow r in _all) r.Selected = false;
+            _grid.Refresh();
+            UpdateTotal();
+        }
+
+        // a tick is saved at once, so the total updates without leaving the cell
+        private void OnDirty(object sender, EventArgs e)
+        {
+            if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewCheckBoxCell)
+                _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
         }
 
         private void UpdateTotal()
         {
             decimal sum = 0;
-            foreach (QuotationItemRow it in _items) sum += it.LineTotal;
-            _total.Text = "Quotation total: PHP " + sum.ToString("N2");
+            int count = 0;
+            foreach (PendingItemRow r in _all)
+            {
+                if (!r.Selected || r.OrderQty <= 0) continue;
+                sum += r.LineTotal;
+                count++;
+            }
+            _total.Text = count + " item(s) selected   |   Total: PHP " + sum.ToString("N2");
         }
 
         private void OnDataError(object sender, DataGridViewDataErrorEventArgs e)
         {
             e.ThrowException = false;
-            MessageBox.Show(this, "Please enter the unit price as a number, for example 1250.00.",
+            MessageBox.Show(this, "Please enter the quantity as a whole number, for example 12.",
                 "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
@@ -385,15 +437,16 @@ namespace SolemateKicks
             string problem = null;
             if (_supplier.SelectedItem == null)
                 problem = "Please choose a supplier.";
-            else if (PaymentTermsValue.Length == 0)
-                problem = "Payment terms are required (for example: 30 days, 50% advance).";
+            else if (SelectedItems.Count == 0)
+                problem = "Tick at least one item to order, with a quantity of 1 or more.";
             else
             {
-                foreach (QuotationItemRow it in _items)
+                foreach (PendingItemRow r in _all)
                 {
-                    if (it.UnitPrice <= 0)
+                    if (!r.Selected) continue;
+                    if (r.OrderQty < 1 || r.OrderQty > r.RemainingQty)
                     {
-                        problem = "Enter a price greater than zero for \"" + it.ProductName + "\".";
+                        problem = "\"" + r.ProductName + "\" (" + r.RefNo + "): the quantity must be from 1 to " + r.RemainingQty + ".";
                         break;
                     }
                 }
