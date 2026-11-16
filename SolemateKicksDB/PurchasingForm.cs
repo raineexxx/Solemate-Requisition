@@ -308,7 +308,7 @@ namespace SolemateKicks
                     return;
                 }
 
-                List<SupplierRow> suppliers = PurchasingService.GetSuppliers();
+                List<SupplierRow> suppliers = PurchasingService.GetSuppliers(true);
                 if (suppliers.Count == 0)
                 {
                     MessageBox.Show(this, "There are no suppliers yet. Open the SUPPLIERS tab and add one first.",

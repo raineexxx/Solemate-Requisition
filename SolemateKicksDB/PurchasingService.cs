@@ -98,9 +98,13 @@ namespace SolemateKicks
         // ------------------------------------------------------------------
         public static List<SupplierRow> GetSuppliers()
         {
+            return GetSuppliers(false);
+        }
+        public static List<SupplierRow> GetSuppliers(bool activeOnly)
+        {
             using (SolemateDataContext db = new SolemateDataContext())
             {
-                return db.ExecuteQuery<SupplierRow>("EXEC dbo.usp_SupGetAll").ToList();
+                return db.ExecuteQuery<SupplierRow>("EXEC dbo.usp_SupGetAll {0}", activeOnly ? 1 : 0).ToList();
             }
         }
 
