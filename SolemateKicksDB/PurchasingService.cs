@@ -44,6 +44,35 @@ namespace SolemateKicks
         }
     }
 
+    /// <summary>
+    /// One item of an approved request that still has quantity left to order.
+    /// Selected and OrderQty are filled in by the Head on the New PO screen.
+    /// </summary>
+    public class PendingItemRow
+    {
+        public int RequisitionItemId { get; set; }
+        public int RequisitionId { get; set; }
+        public string RefNo { get; set; }
+        public string Branch { get; set; }
+        public int ProductId { get; set; }
+        public string ProductName { get; set; }
+        public int RequestedQty { get; set; }
+        public int OrderedQty { get; set; }
+        public int RemainingQty { get; set; }
+        public decimal UnitPrice { get; set; }
+
+        // chosen on the screen (not read from the database)
+        public bool Selected { get; set; }
+        public int OrderQty { get; set; }
+
+        // Worked out from OrderQty and UnitPrice. The empty setter is needed: LINQ to SQL fails on properties without one.
+        public decimal LineTotal
+        {
+            get { return OrderQty * UnitPrice; }
+            set { }
+        }
+    }
+
     /// <summary>One supplier (name, address, email, country).</summary>
     public class SupplierRow
     {
@@ -149,12 +178,35 @@ namespace SolemateKicks
             }
         }
 
-        public static int CreateOrder(int requisitionId, int supplierId, AppUser user)
+        /// <summary>Items of approved requests that still have quantity left to order.</summary>
+        public static List<PendingItemRow> GetPendingItems()
         {
             using (SolemateDataContext db = new SolemateDataContext())
             {
-                return db.ExecuteQuery<int>("EXEC dbo.usp_PurCreateOrder {0}, {1}, {2}",
-                    requisitionId, supplierId, user.UserId).First();
+                return db.ExecuteQuery<PendingItemRow>("EXEC dbo.usp_PurGetPendingItems").ToList();
+            }
+        }
+
+        /// <summary>
+        /// Creates a PO for one supplier from the items the Head selected (each with the quantity to order),
+        /// at the products' current prices. Head only (checked in SQL). Payment terms may be blank.
+        /// Returns the new PurchaseOrderId.
+        /// </summary>
+        public static int CreateOrder(int supplierId, string paymentTerms, IEnumerable<PendingItemRow> items, AppUser user)
+        {
+            StringBuilder xml = new StringBuilder("<items>");
+            foreach (PendingItemRow it in items)
+            {
+                xml.Append("<i r=\"").Append(it.RequisitionItemId.ToString(CultureInfo.InvariantCulture))
+                   .Append("\" q=\"").Append(it.OrderQty.ToString(CultureInfo.InvariantCulture))
+                   .Append("\"/>");
+            }
+            xml.Append("</items>");
+
+            using (SolemateDataContext db = new SolemateDataContext())
+            {
+                return db.ExecuteQuery<int>("EXEC dbo.usp_PurCreateOrder {0}, {1}, {2}, {3}",
+                    supplierId, paymentTerms ?? string.Empty, xml.ToString(), user.UserId).First();
             }
         }
 

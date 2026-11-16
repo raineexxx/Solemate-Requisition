@@ -88,9 +88,7 @@
     <Compile Include="RequisitionForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Requisitionreviewdialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
+    <Compile Include="Requisitionreviewdialog.cs" />
     <Compile Include="RequisitionService.cs" />
     <Compile Include="SalesForm.cs">
       <SubType>Form</SubType>
@@ -141,10 +139,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Database\10_Issuance.sql" />
+    <Content Include="Database\13_SelectItems.sql" />
+    <Content Include="Database\14_ItemApproval.sql" />
     <Content Include="Database\6_Delivery.sql" />
     <Content Include="Database\7_DeliveryUpgrade.sql" />
     <Content Include="Database\9_Sales.sql" />
-    <Content Include="Database\10_Quotations.sql" />
+    <Content Include="Database\11_Quotations.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

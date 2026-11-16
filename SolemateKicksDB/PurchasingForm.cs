@@ -2,15 +2,17 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
-using System.Xml.Linq;
 
-
+// These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
 using Button = System.Windows.Forms.Button;
 using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
- 
+    /// <summary>
+    /// Purchasing page with two tabs in the same window: PURCHASE ORDERS and SUPPLIERS.
+    /// Receiving the goods into stock is the Delivery module's job (it comes after purchasing).
+    /// </summary>
     public partial class PurchasingForm : Form
     {
         private readonly AppUser _user = Session.CurrentUser;
@@ -63,7 +65,7 @@ namespace SolemateKicks
 
         private Control BuildHeader()
         {
-            Panel header = Theme.MakeHeader("Purchasing", "Quotations, purchase orders and suppliers");
+            Panel header = Theme.MakeHeader("Purchasing", "Purchase orders and suppliers");
 
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Theme.Red };
 
@@ -155,7 +157,7 @@ namespace SolemateKicks
 
     // ======================================================================
     //  Tab 1: purchase orders
-    //  Head (who is also the Owner and the purchasing officer): get quotations, create and send a purchase order.
+    //  Head (who is also the Owner and the purchasing officer): create and send a purchase order.
     //  Everyone else: view only.  (The Manager receives the delivery in the Delivery module.)
     // ======================================================================
     public class PurchaseOrdersPanel : UserControl
@@ -302,15 +304,15 @@ namespace SolemateKicks
             LoadData();
         }
 
-        // New PO: choose an approved requisition, record the supplier quotations, create the PO from the lowest one
+        // New PO: choose a supplier and tick the items to order from any approved request, then create the PO
         private void OnNew(object sender, EventArgs e)
         {
             try
             {
-                List<ApprovedRequisitionRow> reqs = PurchasingService.GetApprovedRequisitions();
-                if (reqs.Count == 0)
+                List<PendingItemRow> pending = PurchasingService.GetPendingItems();
+                if (pending.Count == 0)
                 {
-                    MessageBox.Show(this, "There are no approved requisitions waiting for a purchase order.",
+                    MessageBox.Show(this, "There are no approved requests with items left to order.",
                         "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -323,11 +325,12 @@ namespace SolemateKicks
                     return;
                 }
 
-                using (QuotationsDialog dlg = new QuotationsDialog(reqs, suppliers, _user))
+                using (NewPoDialog dlg = new NewPoDialog(pending, suppliers))
                 {
-                    dlg.ShowDialog(this);   // the dialog creates the PO itself when CREATE PO is pressed
+                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                    PurchasingService.CreateOrder(dlg.SupplierIdValue, dlg.PaymentTermsValue, dlg.SelectedItems, _user);
+                    LoadData();
                 }
-                LoadData();
             }
             catch (Exception ex) { ShowError(ex); }
         }
