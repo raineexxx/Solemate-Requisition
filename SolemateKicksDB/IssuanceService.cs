@@ -38,7 +38,7 @@ namespace SolemateKicks
     public class IssueResult
     {
         public string IssueNo { get; set; }
-        public bool Closed { get; set; }
+        public bool FullyIssued { get; set; }
     }
 
     public class SlipRow
@@ -62,6 +62,16 @@ namespace SolemateKicks
         public string Product { get; set; }
         public int Size { get; set; }
         public int Quantity { get; set; }
+    }
+
+    public class BranchStockRow
+    {
+        public string Branch { get; set; }
+        public string Sku { get; set; }
+        public string Brand { get; set; }
+        public string Product { get; set; }
+        public int Size { get; set; }
+        public int Qty { get; set; }
     }
 
     /// <summary>Database work for the Issuance module (Database\10_Issuance.sql).</summary>
@@ -103,10 +113,17 @@ namespace SolemateKicks
                 return db.ExecuteQuery<SlipItemRow>("EXEC dbo.usp_IssGetSlipItems {0}", issuanceId).ToList();
         }
 
-        public static void Acknowledge(int issuanceId, string receivedBy, AppUser user)
+        public static List<BranchStockRow> GetBranchStock(AppUser user)
         {
             using (SolemateDataContext db = new SolemateDataContext())
-                db.ExecuteCommand("EXEC dbo.usp_IssAcknowledge {0}, {1}, {2}", issuanceId, user.UserId, receivedBy ?? string.Empty);
+                return db.ExecuteQuery<BranchStockRow>("EXEC dbo.usp_IssGetBranchStock {0}", user.UserId).ToList();
+        }
+
+        /// <summary>Returns true when this signature closed the requisition (everything issued and signed for).</summary>
+        public static bool Acknowledge(int issuanceId, string receivedBy, AppUser user)
+        {
+            using (SolemateDataContext db = new SolemateDataContext())
+                return db.ExecuteQuery<bool>("EXEC dbo.usp_IssAcknowledge {0}, {1}, {2}", issuanceId, user.UserId, receivedBy ?? string.Empty).First();
         }
     }
 }

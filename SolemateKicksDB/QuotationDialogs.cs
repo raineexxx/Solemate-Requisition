@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -10,6 +10,196 @@ using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
+
+    public class QuotationsDialog : Form
+    {
+        private readonly AppUser _user;
+        private readonly List<SupplierRow> _suppliers;
+        private readonly ComboBox _req = new ComboBox();
+        private readonly DataGridView _grid = new DataGridView();
+        private readonly Label _hint = new Label();
+        private Button _btnAdd, _btnCreate;
+        private readonly bool _canCreate;
+
+        public QuotationsDialog(List<ApprovedRequisitionRow> reqs, List<SupplierRow> suppliers, AppUser user)
+        {
+            _user = user;
+            _suppliers = suppliers;
+            _canCreate = user != null && user.Role == Roles.Manager;   // paper: the purchasing officer (Manager) creates the PO; the Head already approved the budget
+
+            Text = "New purchase order - supplier quotations (for the shortage of an approved purchase requisition)";
+            ClientSize = new Size(840, 520);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Theme.White;
+            Font = Theme.FontBody;
+
+            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 8, BackColor = Theme.Red });
+
+            Controls.Add(new Label { Text = "Requisition", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 30) });
+            _req.DropDownStyle = ComboBoxStyle.DropDownList;
+            _req.Location = new Point(130, 26);
+            _req.Width = 480;
+            foreach (ApprovedRequisitionRow r in reqs) _req.Items.Add(r);   // label comes from ApprovedRequisitionRow.ToString()
+            Controls.Add(_req);
+
+            Controls.Add(new Label
+            {
+                Text = "Quotations (compare the suppliers; the lowest total is selected)",
+                Font = Theme.FontBold,
+                AutoSize = true,
+                Location = new Point(20, 70)
+            });
+
+            Panel gridHost = new Panel { Location = new Point(20, 96), Size = new Size(800, 290) };
+            Theme.StyleGrid(_grid);
+            Theme.AddColumn(_grid, "colSupplier", "SUPPLIER", "SupplierName", 32);
+            Theme.AddColumn(_grid, "colCountry", "COUNTRY", "Country", 14);
+            Theme.AddColumn(_grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 22);
+            Theme.AddColumn(_grid, "colTotal", "TOTAL (PHP)", "Total", 16, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            Theme.AddColumn(_grid, "colLow", "", "LowestText", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
+            _grid.Dock = DockStyle.Fill;
+            _grid.CellFormatting += OnCellFormatting;
+            gridHost.Controls.Add(_grid);
+            Controls.Add(gridHost);
+
+            _hint.Font = Theme.FontSmall;
+            _hint.ForeColor = Theme.Muted;
+            _hint.AutoSize = false;
+            _hint.Bounds = new Rectangle(20, 394, 800, 40);
+            Controls.Add(_hint);
+
+            _btnAdd = Theme.MakeButton("ADD / UPDATE QUOTATION", 230, false, OnAddQuotation);
+            _btnAdd.Location = new Point(20, 460);
+            _btnCreate = Theme.MakeButton("CREATE PO", 150, true, OnCreate);
+            _btnCreate.Location = new Point(520, 460);
+            Button close = Theme.MakeButton("CLOSE", 110, false, null);
+            close.DialogResult = DialogResult.Cancel;
+            close.Location = new Point(690, 460);
+
+            Controls.Add(_btnAdd);
+            Controls.Add(_btnCreate);
+            Controls.Add(close);
+            CancelButton = close;
+
+            _req.SelectedIndexChanged += delegate { LoadQuotes(); };
+            if (_req.Items.Count > 0) _req.SelectedIndex = 0;
+        }
+
+        private ApprovedRequisitionRow SelectedReq
+        {
+            get { return _req.SelectedItem as ApprovedRequisitionRow; }
+        }
+
+        private ReqQuotationRow SelectedQuote
+        {
+            get { return _grid.CurrentRow == null ? null : _grid.CurrentRow.DataBoundItem as ReqQuotationRow; }
+        }
+
+        private void LoadQuotes()
+        {
+            try
+            {
+                ApprovedRequisitionRow req = SelectedReq;
+                if (req == null) return;
+
+                List<ReqQuotationRow> list = PurchasingService.GetRequisitionQuotations(req.RequisitionId);
+                _grid.DataSource = list;
+
+                // select the lowest quotation by default
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i].IsLowest)
+                    {
+                        _grid.ClearSelection();
+                        _grid.Rows[i].Selected = true;
+                        _grid.CurrentCell = _grid.Rows[i].Cells[0];
+                        break;
+                    }
+                }
+
+                bool enough = list.Count >= 2;
+                _btnCreate.Enabled = enough && _canCreate;
+                if (!enough)
+                    _hint.Text = "Record quotations from at least two suppliers (the UK and Vietnam suppliers) before creating the purchase order.";
+                else if (!_canCreate)
+                    _hint.Text = "Lowest total: " + LowestOf(list).SupplierName + ". Only the Manager (purchasing officer) can create the purchase order.";
+                else
+                    _hint.Text = "Lowest total: " + LowestOf(list).SupplierName + ". CREATE PO uses the selected supplier's quoted prices and payment terms. The Head already approved the budget.";
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        private static ReqQuotationRow LowestOf(List<ReqQuotationRow> list)
+        {
+            foreach (ReqQuotationRow q in list) if (q.IsLowest) return q;
+            return list[0];
+        }
+
+        private void OnCellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            ReqQuotationRow row = _grid.Rows[e.RowIndex].DataBoundItem as ReqQuotationRow;
+            if (row == null || !row.IsLowest) return;
+
+            e.CellStyle.ForeColor = Theme.Ok;
+            e.CellStyle.Font = Theme.FontBold;
+        }
+
+        private void OnAddQuotation(object sender, EventArgs e)
+        {
+            ApprovedRequisitionRow req = SelectedReq;
+            if (req == null) return;
+
+            try
+            {
+                List<ReqQuotationRow> existing = PurchasingService.GetRequisitionQuotations(req.RequisitionId);
+                ReqQuotationRow sel = SelectedQuote;
+
+                using (QuotationEntryDialog dlg = new QuotationEntryDialog(
+                    req.RequisitionId, _suppliers, existing, sel != null ? sel.SupplierId : 0))
+                {
+                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                    PurchasingService.SaveRequisitionQuotation(req.RequisitionId, dlg.SupplierIdValue,
+                        dlg.PaymentTermsValue, dlg.ItemsValue, _user);
+                }
+                LoadQuotes();
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        private void OnCreate(object sender, EventArgs e)
+        {
+            ApprovedRequisitionRow req = SelectedReq;
+            ReqQuotationRow sel = SelectedQuote;
+            if (req == null || sel == null) return;
+
+            if (!sel.IsLowest)
+            {
+                DialogResult ask = MessageBox.Show(this,
+                    "\"" + sel.SupplierName + "\" is not the lowest quotation. The current practice is to choose the lowest price.\r\n\r\nCreate the purchase order for this supplier anyway?",
+                    "Not the lowest price", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                if (ask != DialogResult.Yes) return;
+            }
+
+            try
+            {
+                PurchasingService.CreateOrder(req.RequisitionId, sel.SupplierId, _user);
+                DialogResult = DialogResult.OK;
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        private void ShowError(Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     // ======================================================================
     //  New purchase order: the Head picks a supplier, then ticks the items to order from any approved request
     //  and types the quantity of each. One PO = one supplier, and may mix items of several requests.
@@ -17,9 +207,9 @@ namespace SolemateKicks
     // ======================================================================
     public class NewPoDialog : Form
     {
-        private const string AllRequests = "All requests";
-
-        private readonly List<PendingItemRow> _all;
+        private readonly int _requisitionId;
+        private readonly List<ReqQuotationRow> _existing;
+        private readonly List<SupplierRow> _all;
         private readonly ComboBox _supplier = new ComboBox();
         private readonly ComboBox _filter = new ComboBox();
         private readonly TextBox _terms = new TextBox();
@@ -36,10 +226,11 @@ namespace SolemateKicks
             get { return _all.FindAll(delegate (PendingItemRow r) { return r.Selected && r.OrderQty > 0; }); }
         }
 
-        public NewPoDialog(List<PendingItemRow> pending, List<SupplierRow> suppliers)
+        public QuotationEntryDialog(int requisitionId, List<SupplierRow> suppliers, List<ReqQuotationRow> existing, int preselectSupplierId)
         {
-            _all = pending;
-            foreach (PendingItemRow r in _all) r.OrderQty = r.RemainingQty;   // default: order everything that is left
+            _requisitionId = requisitionId;
+            _existing = existing;
+            _all = suppliers;
 
             Text = "New purchase order";
             ClientSize = new Size(1000, 640);
@@ -76,18 +267,12 @@ namespace SolemateKicks
             List<string> seen = new List<string>();
             foreach (PendingItemRow r in _all)
             {
-                string label = r.RefNo + "  -  " + r.Branch;
-                if (!seen.Contains(label)) { seen.Add(label); _filter.Items.Add(label); }
-            }
-            _filter.SelectedIndex = 0;
-            Controls.Add(_filter);
-
-            Button all = Theme.MakeButton("TICK ALL SHOWN", 170, false, OnTickAll);
-            all.Location = new Point(560, 64);
-            Button none = Theme.MakeButton("CLEAR", 100, false, OnClear);
-            none.Location = new Point(740, 64);
-            Controls.Add(all);
-            Controls.Add(none);
+                Text = "Enter the unit price quoted for each item to buy, in PHP (the price list is suggested when there is no quotation yet).",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Muted,
+                AutoSize = true,
+                Location = new Point(20, 108)
+            });
 
             Panel gridHost = new Panel { Location = new Point(20, 110), Size = new Size(960, 430) };
             Theme.StyleGrid(_grid);
@@ -99,21 +284,42 @@ namespace SolemateKicks
 
             _grid.Columns.Add(new DataGridViewCheckBoxColumn
             {
-                Name = "colPick",
-                HeaderText = "ORDER",
-                DataPropertyName = "Selected",
-                FillWeight = 8
+                Name = "colItem",
+                HeaderText = "ITEM",
+                DataPropertyName = "ProductName",
+                ReadOnly = true,
+                FillWeight = 44
             });
-            _grid.Columns.Add(TextCol("colReq", "REQUEST", "RefNo", 17, true, false));
-            _grid.Columns.Add(TextCol("colBranch", "BRANCH", "Branch", 12, true, false));
-            _grid.Columns.Add(TextCol("colItem", "ITEM", "ProductName", 26, true, false));
-            _grid.Columns.Add(TextCol("colAsked", "REQUESTED", "RequestedQty", 10, true, true));
-            _grid.Columns.Add(TextCol("colLeft", "LEFT TO ORDER", "RemainingQty", 11, true, true));
-            _grid.Columns.Add(TextCol("colQty", "QTY TO ORDER", "OrderQty", 11, false, true));
-            DataGridViewTextBoxColumn price = TextCol("colPrice", "PRICE (PHP)", "UnitPrice", 11, true, true);
+            DataGridViewTextBoxColumn qty = new DataGridViewTextBoxColumn
+            {
+                Name = "colQty",
+                HeaderText = "QTY",
+                DataPropertyName = "Quantity",
+                ReadOnly = true,
+                FillWeight = 12
+            };
+            qty.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            _grid.Columns.Add(qty);
+            DataGridViewTextBoxColumn price = new DataGridViewTextBoxColumn
+            {
+                Name = "colPrice",
+                HeaderText = "UNIT PRICE (PHP)",
+                DataPropertyName = "UnitPrice",
+                ReadOnly = false,
+                FillWeight = 22
+            };
+            price.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             price.DefaultCellStyle.Format = "N2";
             _grid.Columns.Add(price);
-            DataGridViewTextBoxColumn line = TextCol("colLine", "AMOUNT (PHP)", "LineTotal", 12, true, true);
+            DataGridViewTextBoxColumn line = new DataGridViewTextBoxColumn
+            {
+                Name = "colLine",
+                HeaderText = "AMOUNT (PHP)",
+                DataPropertyName = "LineTotal",
+                ReadOnly = true,
+                FillWeight = 22
+            };
+            line.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             line.DefaultCellStyle.Format = "N2";
             _grid.Columns.Add(line);
 
@@ -172,12 +378,14 @@ namespace SolemateKicks
             string pick = _filter.SelectedItem as string;
             List<PendingItemRow> rows = _all.FindAll(delegate (PendingItemRow r)
             {
-                return pick == null || pick == AllRequests || (r.RefNo + "  -  " + r.Branch) == pick;
-            });
-            _view = new BindingList<PendingItemRow>(rows);
-            _grid.DataSource = _view;
-            UpdateTotal();
-        }
+                int supplierId = SupplierIdValue;
+                _items = new BindingList<QuotationItemRow>(PurchasingService.GetQuotationItems(_requisitionId, supplierId));
+                _grid.DataSource = _items;
+
+                // an earlier quotation of this supplier for this requisition wins; otherwise suggest the supplier's usual payment terms
+                _terms.Text = ((SupplierRow)_supplier.SelectedItem).PaymentTerms ?? string.Empty;
+                foreach (ReqQuotationRow q in _existing)
+                    if (q.SupplierId == supplierId) { _terms.Text = q.PaymentTerms; break; }
 
         private void OnTickAll(object sender, EventArgs e)
         {

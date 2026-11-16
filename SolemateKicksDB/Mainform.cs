@@ -45,11 +45,12 @@ namespace SolemateKicks
         private Label lblCount;
         private Label lblBanner;
         private Label lblDetail;
-        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnSales, btnIssuance, btnRefresh, btnDetails;
+        private Button btnNew, btnRevise, btnApprove, btnReject, btnCancel, btnInventory, btnDelivery, btnPurchasing, btnSales, btnIssuance, btnRefresh, btnDetails, btnNotifications;
+        private System.Windows.Forms.Timer _notifTimer;
         public MainForm()
         {
             Text = "Solemate - Requisition";
-            ClientSize = new Size(1180, 720);
+            ClientSize = new Size(1280, 760);
             MinimumSize = new Size(1100, 640);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Canvas;
@@ -63,6 +64,12 @@ namespace SolemateKicks
             cmbView.SelectedIndexChanged += (s, e) => { if (!_filling) ApplyLineFilter(); };
             cmbStock.SelectedIndexChanged += (s, e) => { if (!_filling) ApplyLineFilter(); };
             Shown += (s, e) => LoadData();
+
+            // refresh the unread-notification count every 30 seconds
+            _notifTimer = new System.Windows.Forms.Timer { Interval = 30000 };
+            _notifTimer.Tick += (s, e) => UpdateNotificationCount();
+            Shown += (s, e) => _notifTimer.Start();
+            FormClosed += (s, e) => _notifTimer.Stop();
         }
 
         // ==================================================================
@@ -74,20 +81,22 @@ namespace SolemateKicks
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 5,
                 Margin = new Padding(0),
                 Padding = new Padding(0)
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76f));   // header
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112f));  // toolbar (two rows: actions + modules)
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 102f));  // toolbar (two rows: actions + modules)
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80f));   // summary cards
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));    // banner (0 = hidden)
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // content
 
             root.Controls.Add(BuildHeader(), 0, 0);
             root.Controls.Add(BuildToolbar(), 0, 1);
-            root.Controls.Add(BuildBanner(), 0, 2);
-            root.Controls.Add(BuildContent(), 0, 3);
+            root.Controls.Add(BuildStats(), 0, 2);
+            root.Controls.Add(BuildBanner(), 0, 3);
+            root.Controls.Add(BuildContent(), 0, 4);
 
             Controls.Add(root);
         }
@@ -121,14 +130,34 @@ namespace SolemateKicks
 
         private Control BuildToolbar()
         {
-            Panel toolbar = new Panel { Dock = DockStyle.Fill, BackColor = Theme.White, Margin = new Padding(0) };
+            // two stacked rows: requisition actions (top) and module navigation (bottom)
+            TableLayoutPanel toolbar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0),
+                BackColor = Theme.White
+            };
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 58f));
+            toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 44f));
+            toolbar.Controls.Add(BuildActionsRow(), 0, 0);
+            toolbar.Controls.Add(BuildNavRow(), 0, 1);
+            return toolbar;
+        }
+
+        /// <summary>Row 1: the requisition buttons for this role + the status filter on the right.</summary>
+        private Control BuildActionsRow()
+        {
+            Panel row = new Panel { Dock = DockStyle.Fill, BackColor = Theme.White, Margin = new Padding(0) };
 
             FlowLayoutPanel flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                WrapContents = true,   // row 1 = requisition actions, row 2 = module buttons (forced by SetFlowBreak below)
+                WrapContents = false,
                 FlowDirection = FlowDirection.LeftToRight,
-                Padding = new Padding(8, 11, 0, 0)
+                Padding = new Padding(10, 9, 0, 0)
             };
 
             btnNew = Theme.MakeButton("+ NEW REQUISITION", 170, true, OnNew);
@@ -137,55 +166,168 @@ namespace SolemateKicks
             btnApprove = Theme.MakeButton("APPROVE", 110, true, OnApprove);
             btnReject = Theme.MakeButton("REJECT", 100, false, OnReject);
             btnCancel = Theme.MakeButton("CANCEL REQUEST", 140, false, OnCancelRequest);
-            btnInventory = Theme.MakeButton("INVENTORY", 110, false, OnInventory);
-            btnPurchasing = Theme.MakeButton("PURCHASING", 120, false, OnPurchasing);
-            btnDelivery = Theme.MakeButton("DELIVERY", 100, false, OnDelivery);
-            btnSales = Theme.MakeButton("SALES", 90, false, OnSales);
-            btnIssuance = Theme.MakeButton("ISSUANCE", 100, false, OnIssuance);
-            btnRefresh = Theme.MakeButton("REFRESH", 90, false, (s, e) => LoadData());
 
-            bool isHead = _user.Role == Roles.Head;
-            if (!isHead)
-            {
-                flow.Controls.Add(btnNew);
-                flow.Controls.Add(btnRevise);
-                flow.Controls.Add(btnCancel);
-            }
-            else
+            if (_user.Role == Roles.Head)
             {
                 flow.Controls.Add(btnDetails);   // Head: open the full details of the selected requisition
                 flow.Controls.Add(btnApprove);
                 flow.Controls.Add(btnReject);
             }
-            // end of row 1: the last action button starts a new row for the module buttons
-            flow.SetFlowBreak(isHead ? btnReject : btnCancel, true);
-
-            flow.Controls.Add(btnInventory);   // link to the Inventory module (everyone can view, only the Manager can edit)
-            flow.Controls.Add(btnPurchasing);  // link to the Purchasing module (everyone can view, only the Manager can edit)
-            flow.Controls.Add(btnSales);       // Sales: stock is deducted when a sale is completed
-            flow.Controls.Add(btnIssuance);    // Issuance: reserve, issue and acknowledge stock for approved requisitions
-            flow.Controls.Add(btnDelivery);    // link to the Delivery module (everyone can view, only the Manager can edit)
-            flow.Controls.Add(btnRefresh);
-
-            foreach (Control c in flow.Controls) c.Margin = new Padding(3, 0, 3, 8);
+            else
+            {
+                flow.Controls.Add(btnNew);
+                flow.Controls.Add(btnRevise);
+                flow.Controls.Add(btnCancel);
+            }
+            foreach (Control c in flow.Controls) c.Margin = new Padding(3, 0, 3, 0);
 
             // status filter on the right
-            Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 240 };
-            Label lbl = new Label { Text = "Show:", Font = Theme.FontBold, AutoSize = true, Location = new Point(10, 22) };
+            Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 250 };
+            Label lbl = new Label { Text = "Show:", Font = Theme.FontBold, AutoSize = true, Location = new Point(10, 18) };
             cmbStatus = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = Theme.FontBody,
-                Location = new Point(62, 18),
-                Width = 160
+                Location = new Point(62, 14),
+                Width = 170
             };
             cmbStatus.Items.AddRange(Statuses.Filter);
             rightBox.Controls.Add(lbl);
             rightBox.Controls.Add(cmbStatus);
 
-            toolbar.Controls.Add(flow);       // fill
-            toolbar.Controls.Add(rightBox);   // right edge
-            return toolbar;
+            row.Controls.Add(flow);       // fill
+            row.Controls.Add(rightBox);   // right edge
+            return row;
+        }
+
+        /// <summary>Row 2: slim navigation strip with the modules (flat buttons, red on hover).</summary>
+        private Control BuildNavRow()
+        {
+            Panel nav = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Canvas, Margin = new Padding(0) };
+            nav.Paint += (s, e) =>
+            {
+                using (Pen pen = new Pen(Theme.Line))
+                {
+                    e.Graphics.DrawLine(pen, 0, 0, nav.Width, 0);
+                    e.Graphics.DrawLine(pen, 0, nav.Height - 1, nav.Width, nav.Height - 1);
+                }
+            };
+
+            btnRefresh = MakeNavButton("REFRESH", 100, (s, e) => LoadData());
+            btnNotifications = MakeNavButton("NOTIFICATIONS", 150, OnNotifications);
+            Panel right = new Panel { Dock = DockStyle.Right, Width = 280, BackColor = Theme.Canvas };
+            btnNotifications.Location = new Point(4, 4);
+            btnRefresh.Location = new Point(160, 4);
+            right.Controls.Add(btnNotifications);
+            right.Controls.Add(btnRefresh);
+
+            FlowLayoutPanel flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                WrapContents = false,
+                FlowDirection = FlowDirection.LeftToRight,
+                BackColor = Theme.Canvas,
+                Padding = new Padding(10, 0, 0, 0)
+            };
+
+            btnInventory = MakeNavButton("INVENTORY", 112, OnInventory);   // everyone can view, only the Manager can edit
+            btnSales = MakeNavButton("SALES", 84, OnSales);                // stock is deducted when a sale is completed
+            btnIssuance = MakeNavButton("ISSUANCE", 100, OnIssuance);      // reserve, issue and acknowledge stock
+            btnPurchasing = MakeNavButton("PURCHASING", 124, OnPurchasing);
+            btnDelivery = MakeNavButton("DELIVERY", 100, OnDelivery);
+
+            flow.Controls.Add(btnInventory);
+            flow.Controls.Add(btnSales);
+            flow.Controls.Add(btnIssuance);
+            flow.Controls.Add(btnPurchasing);
+            flow.Controls.Add(btnDelivery);
+
+            nav.Controls.Add(flow);    // fill
+            nav.Controls.Add(right);   // right edge
+            return nav;
+        }
+
+        private static Button MakeNavButton(string text, int width, EventHandler onClick)
+        {
+            Button b = new Button
+            {
+                Text = text,
+                Width = width,
+                Height = 34,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Canvas,
+                ForeColor = Theme.Ink,
+                Font = Theme.FontButton,
+                Cursor = Cursors.Hand,
+                Margin = new Padding(2, 5, 2, 0),
+                UseVisualStyleBackColor = false
+            };
+            b.FlatAppearance.BorderSize = 0;
+            b.FlatAppearance.MouseOverBackColor = Theme.RedSoft;
+            b.FlatAppearance.MouseDownBackColor = Theme.RedSoft;
+            b.MouseEnter += (s, e) => b.ForeColor = Theme.Red;
+            b.MouseLeave += (s, e) => b.ForeColor = Theme.Ink;
+            b.Click += onClick;
+            return b;
+        }
+
+        // ---- summary cards (counts of all requisitions this user can see) ----
+        private readonly Label[] _statNums = new Label[5];
+
+        private Control BuildStats()
+        {
+            TableLayoutPanel t = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 5,
+                RowCount = 1,
+                Margin = new Padding(0),
+                Padding = new Padding(8, 10, 0, 2),
+                BackColor = Theme.Canvas
+            };
+            for (int i = 0; i < 5; i++) t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            string[] captions = { "ALL REQUISITIONS", "PENDING", "APPROVED", "REJECTED", "CLOSED" };
+            Color[] colors = { Theme.Ink, Theme.Warn, Theme.Ok, Theme.Red, Theme.Muted };
+
+            for (int i = 0; i < 5; i++)
+            {
+                Panel card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.White, Margin = new Padding(0, 0, 8, 0) };
+                Panel bar = new Panel { Dock = DockStyle.Left, Width = 5, BackColor = colors[i] };
+                Label num = new Label
+                {
+                    Text = "0",
+                    Font = new Font("Segoe UI", 20f, FontStyle.Bold),
+                    ForeColor = colors[i],
+                    AutoSize = false,
+                    Bounds = new Rectangle(18, 2, 160, 40)
+                };
+                Label cap = new Label
+                {
+                    Text = captions[i],
+                    Font = Theme.FontSmall,
+                    ForeColor = Theme.Muted,
+                    AutoSize = false,
+                    Bounds = new Rectangle(18, 42, 200, 18)
+                };
+                card.Controls.Add(num);
+                card.Controls.Add(cap);
+                card.Controls.Add(bar);
+                _statNums[i] = num;
+                t.Controls.Add(card, i, 0);
+            }
+            return t;
+        }
+
+        private void UpdateStats(List<RequisitionRow> all)
+        {
+            Func<string, int> count = st => all.Count(r => r.Status == st);
+            _statNums[0].Text = all.Count.ToString();
+            _statNums[1].Text = count(Statuses.Pending).ToString();
+            _statNums[2].Text = count(Statuses.Approved).ToString();
+            _statNums[3].Text = count(Statuses.Rejected).ToString();
+            _statNums[4].Text = count(Statuses.Closed).ToString();
         }
 
         private Control BuildBanner()
@@ -429,6 +571,8 @@ namespace SolemateKicks
                 gridReq.ClearSelection();
 
                 UpdateBanner();
+                UpdateNotificationCount();
+                UpdateStats(RequisitionService.GetRequisitions(_user, "All"));
             }
             catch (Exception ex)
             {
@@ -454,8 +598,13 @@ namespace SolemateKicks
             if (_user.Role == Roles.Head)
             {
                 int pending = RequisitionService.GetPendingCount();
+                int waiting = 0;
+                try { waiting = PurchasingService.GetPendingApprovalCount(); } catch { }   // needs 11_PurchasingUpgrade.sql
                 if (pending > 0)
                     msg = string.Format("   {0} requisition(s) waiting for your approval.", pending);
+                if (waiting > 0)
+                    msg = (msg == null ? "" : msg + "   |") +
+                          string.Format("   {0} purchase requisition(s) waiting for your budget approval (PURCHASING).", waiting);
             }
             else
             {
@@ -465,7 +614,7 @@ namespace SolemateKicks
             }
 
             lblBanner.Text = msg ?? string.Empty;
-            root.RowStyles[2].Height = (msg == null) ? 0f : 36f;
+            root.RowStyles[3].Height = (msg == null) ? 0f : 36f;
         }
 
         private RequisitionRow Selected()
@@ -627,6 +776,30 @@ namespace SolemateKicks
                 f.ShowDialog(this);
             }
             LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+        }
+
+        private void OnNotifications(object sender, EventArgs e)
+        {
+            using (NotificationsForm f = new NotificationsForm())
+            {
+                f.ShowDialog(this);
+            }
+            UpdateNotificationCount();
+        }
+
+        /// <summary>Shows how many unread notifications this user has on the NOTIFICATIONS button.</summary>
+        private void UpdateNotificationCount()
+        {
+            try
+            {
+                int n = NotificationService.CountUnread(_user);
+                btnNotifications.Text = n > 0 ? "NOTIFICATIONS (" + n + ")" : "NOTIFICATIONS";
+                btnNotifications.ForeColor = n > 0 ? Theme.Red : Theme.Ink;
+            }
+            catch
+            {
+                // the notification tables are created by 11_PurchasingUpgrade.sql; never block the screen because of them
+            }
         }
 
         private void OnSales(object sender, EventArgs e)

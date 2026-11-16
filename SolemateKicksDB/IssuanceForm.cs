@@ -20,7 +20,7 @@ namespace SolemateKicks
         private readonly bool _isManager;
 
         private TabControl tabs;
-        private DataGridView gridReq, gridReqItems, gridSlips, gridSlipItems;
+        private DataGridView gridReq, gridReqItems, gridSlips, gridSlipItems, gridBranch;
         private Button btnReserve, btnIssue, btnAck;
 
         public IssuanceForm()
@@ -54,8 +54,11 @@ namespace SolemateKicks
             TabPage t2 = new TabPage("Issuance slips") { BackColor = Theme.Canvas };
             t1.Controls.Add(BuildToIssueTab());
             t2.Controls.Add(BuildSlipsTab());
+            TabPage t3 = new TabPage("Branch stock") { BackColor = Theme.Canvas };
+            t3.Controls.Add(BuildBranchTab());
             tabs.TabPages.Add(t1);
             tabs.TabPages.Add(t2);
+            tabs.TabPages.Add(t3);
             root.Controls.Add(tabs, 0, 1);
 
             Controls.Add(root);
@@ -214,6 +217,28 @@ namespace SolemateKicks
             return t;
         }
 
+        private Control BuildBranchTab()
+        {
+            TableLayoutPanel t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(8) };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            Label l1 = Theme.MakeSectionTitle("Stock received by each branch (added when the branch acknowledges a slip)");
+            l1.Dock = DockStyle.Fill;
+            t.Controls.Add(l1, 0, 0);
+
+            gridBranch = NewGrid();
+            Theme.AddColumn(gridBranch, "bBranch", "BRANCH", "Branch", 18f);
+            Theme.AddColumn(gridBranch, "bSku", "SKU", "Sku", 16f);
+            Theme.AddColumn(gridBranch, "bBrand", "BRAND", "Brand", 16f);
+            Theme.AddColumn(gridBranch, "bProd", "PRODUCT", "Product", 28f);
+            Theme.AddColumn(gridBranch, "bSize", "SIZE", "Size", 8f, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(gridBranch, "bQty", "PAIRS RECEIVED", "Qty", 14f, null, true, DataGridViewContentAlignment.MiddleCenter);
+            t.Controls.Add(gridBranch, 0, 1);
+            return t;
+        }
+
         // ==================================================================
         //  Data
         // ==================================================================
@@ -233,6 +258,7 @@ namespace SolemateKicks
 
                 gridSlips.DataSource = IssuanceService.GetSlips(_user);
                 LoadSlipItems();
+                gridBranch.DataSource = IssuanceService.GetBranchStock(_user);
             }
             catch (Exception ex) { ShowError(ex); }
         }
@@ -297,8 +323,8 @@ namespace SolemateKicks
             {
                 IssueResult res = IssuanceService.Issue(r.RequisitionId, _user);
                 string msg = "Issuance slip " + res.IssueNo + " created. Stock deducted.";
-                msg += res.Closed ? "\r\nRequisition " + r.RefNo + " is fully issued and now CLOSED."
-                                  : "\r\nRequisition " + r.RefNo + " is only partly issued and stays open for the remaining items.";
+                msg += res.FullyIssued ? "\r\nRequisition " + r.RefNo + " is fully issued. It closes when the branch signs the acknowledgment."
+                                       : "\r\nRequisition " + r.RefNo + " is only partly issued and stays open for the remaining items.";
                 MessageBox.Show(this, msg, "Issued", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadAll();
                 tabs.SelectedIndex = 1;
@@ -319,8 +345,10 @@ namespace SolemateKicks
             if (string.IsNullOrWhiteSpace(name)) return;
             try
             {
-                IssuanceService.Acknowledge(s.IssuanceId, name, _user);
-                MessageBox.Show(this, s.IssueNo + " acknowledged by " + name.Trim() + ".", "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                bool closed = IssuanceService.Acknowledge(s.IssuanceId, name, _user);
+                MessageBox.Show(this, s.IssueNo + " acknowledged by " + name.Trim() + "." +
+                                (closed ? "\r\nRequisition " + s.RequisitionRef + " is now CLOSED." : ""),
+                    "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadAll();
             }
             catch (Exception ex) { ShowError(ex); }

@@ -17,9 +17,11 @@ namespace SolemateKicks
     {
         private readonly AppUser _user = Session.CurrentUser;
 
+        private PurchaseRequisitionsPanel pnlPrs;
         private PurchaseOrdersPanel pnlOrders;
         private SuppliersPanel pnlSuppliers;
-        private Button btnTabOrders, btnTabSuppliers;
+        private QuotationsPanel pnlQuotes;
+        private Button btnTabPrs, btnTabOrders, btnTabQuotes, btnTabSuppliers;
 
         public PurchasingForm()
         {
@@ -36,7 +38,8 @@ namespace SolemateKicks
 
         private void PurchasingForm_Shown(object sender, EventArgs e)
         {
-            ShowTab(true);
+            // the Head starts on the purchase requisitions (budget approval); everyone else on the purchase orders
+            ShowTab(_user.Role == Roles.Head ? 0 : 1);
         }
 
         // ==================================================================
@@ -65,7 +68,7 @@ namespace SolemateKicks
 
         private Control BuildHeader()
         {
-            Panel header = Theme.MakeHeader("Purchasing", "Purchase orders and suppliers");
+            Panel header = Theme.MakeHeader("Purchasing", "Quotations, purchase orders and suppliers");
 
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Theme.Red };
 
@@ -102,10 +105,14 @@ namespace SolemateKicks
                 Margin = new Padding(0)
             };
 
-            btnTabOrders = Theme.MakeButton("PURCHASE ORDERS", 190, true, OnTabOrders);
+            btnTabPrs = Theme.MakeButton("PURCHASE REQUISITIONS", 250, true, OnTabPrs);
+            btnTabOrders = Theme.MakeButton("PURCHASE ORDERS", 190, false, OnTabOrders);
+            btnTabQuotes = Theme.MakeButton("QUOTATIONS", 150, false, OnTabQuotes);
             btnTabSuppliers = Theme.MakeButton("SUPPLIERS", 150, false, OnTabSuppliers);
 
+            flow.Controls.Add(btnTabPrs);
             flow.Controls.Add(btnTabOrders);
+            flow.Controls.Add(btnTabQuotes);
             flow.Controls.Add(btnTabSuppliers);
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
             return flow;
@@ -115,11 +122,17 @@ namespace SolemateKicks
         {
             Panel host = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0), Padding = new Padding(0) };
 
+            pnlPrs = new PurchaseRequisitionsPanel();
             pnlOrders = new PurchaseOrdersPanel();
+            pnlOrders.Visible = false;
+            pnlQuotes = new QuotationsPanel();
+            pnlQuotes.Visible = false;
             pnlSuppliers = new SuppliersPanel();
             pnlSuppliers.Visible = false;
 
+            host.Controls.Add(pnlPrs);
             host.Controls.Add(pnlOrders);
+            host.Controls.Add(pnlQuotes);
             host.Controls.Add(pnlSuppliers);
             return host;
         }
@@ -127,26 +140,43 @@ namespace SolemateKicks
         // ==================================================================
         //  Tabs
         // ==================================================================
-        private void ShowTab(bool orders)
+        // tab: 0 = purchase requisitions, 1 = purchase orders, 2 = quotations, 3 = suppliers
+        private void ShowTab(int tab)
         {
-            pnlOrders.Visible = orders;
-            pnlSuppliers.Visible = !orders;
+            pnlPrs.Visible = tab == 0;
+            pnlOrders.Visible = tab == 1;
+            pnlQuotes.Visible = tab == 2;
+            pnlSuppliers.Visible = tab == 3;
 
-            Theme.StyleButton(btnTabOrders, orders);
-            Theme.StyleButton(btnTabSuppliers, !orders);
+            Theme.StyleButton(btnTabPrs, tab == 0);
+            Theme.StyleButton(btnTabOrders, tab == 1);
+            Theme.StyleButton(btnTabQuotes, tab == 2);
+            Theme.StyleButton(btnTabSuppliers, tab == 3);
 
-            if (orders) pnlOrders.LoadData();
+            if (tab == 0) pnlPrs.LoadData();
+            else if (tab == 1) pnlOrders.LoadData();
+            else if (tab == 2) pnlQuotes.LoadData();
             else pnlSuppliers.LoadData();
+        }
+
+        private void OnTabPrs(object sender, EventArgs e)
+        {
+            ShowTab(0);
         }
 
         private void OnTabOrders(object sender, EventArgs e)
         {
-            ShowTab(true);
+            ShowTab(1);
+        }
+
+        private void OnTabQuotes(object sender, EventArgs e)
+        {
+            ShowTab(2);
         }
 
         private void OnTabSuppliers(object sender, EventArgs e)
         {
-            ShowTab(false);
+            ShowTab(3);
         }
 
         private void OnBack(object sender, EventArgs e)
@@ -157,20 +187,23 @@ namespace SolemateKicks
 
     // ======================================================================
     //  Tab 1: purchase orders
-    //  Head (who is also the Owner and the purchasing officer): create and send a purchase order.
+    //  Head (who is also the Owner and the purchasing officer): get quotations, create and send a purchase order.
     //  Everyone else: view only.  (The Manager receives the delivery in the Delivery module.)
     // ======================================================================
     public class PurchaseOrdersPanel : UserControl
     {
         private readonly AppUser _user = Session.CurrentUser;
-        private readonly bool _canManage;
+        private readonly bool _isManager;
+        private readonly bool _canCancel;
 
-        private DataGridView grid;
-        private Button btnNew, btnSend;
+        private DataGridView grid, gridItems;
+        private Button btnNew, btnSend, btnCancelPo, btnPrint, btnEmail;
+        private Label lblInfo;
 
         public PurchaseOrdersPanel()
         {
-            _canManage = _user != null && _user.Role == Roles.Head;
+            _isManager = _user != null && _user.Role == Roles.Manager;
+            _canCancel = _user != null && (_user.Role == Roles.Head || _user.Role == Roles.Manager);
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Canvas;
@@ -185,16 +218,18 @@ namespace SolemateKicks
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 2,
+                RowCount = 3,
                 Margin = new Padding(0),
                 Padding = new Padding(0)
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f));   // toolbar
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // grid
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 58f));    // purchase orders
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 42f));    // items of the selected PO
 
             root.Controls.Add(BuildToolbar(), 0, 0);
-            root.Controls.Add(BuildContent(), 0, 1);
+            root.Controls.Add(BuildOrdersCard(), 0, 1);
+            root.Controls.Add(BuildItemsCard(), 0, 2);
             Controls.Add(root);
         }
 
@@ -210,39 +245,74 @@ namespace SolemateKicks
                 Margin = new Padding(0)
             };
 
-            btnNew = Theme.MakeButton("+ NEW PO", 130, true, OnNew);
-            btnSend = Theme.MakeButton("SEND PO TO SUPPLIER", 210, false, OnSend);
+            btnNew = Theme.MakeButton("+ NEW PO", 120, true, OnNew);
+            btnSend = Theme.MakeButton("SEND TO SUPPLIER", 180, true, OnSend);
+            btnCancelPo = Theme.MakeButton("CANCEL PO", 120, false, OnCancelPo);
+            btnPrint = Theme.MakeButton("PRINT PO", 110, false, OnPrint);
+            btnEmail = Theme.MakeButton("EMAIL PO", 110, false, OnEmail);
             Button btnRefresh = Theme.MakeButton("REFRESH", 100, false, OnRefresh);
 
-            if (_canManage)
-            {
-                flow.Controls.Add(btnNew);
-                flow.Controls.Add(btnSend);
-            }
+            if (_isManager) { flow.Controls.Add(btnNew); flow.Controls.Add(btnSend); }
+            if (_canCancel) flow.Controls.Add(btnCancelPo);
+            flow.Controls.Add(btnPrint);
+            flow.Controls.Add(btnEmail);
             flow.Controls.Add(btnRefresh);
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
             return flow;
         }
 
-        private Control BuildContent()
+        private Control BuildOrdersCard()
         {
             Panel card = Theme.MakeCard(new Padding(10));
 
             grid = new DataGridView();
             Theme.StyleGrid(grid);
-            Theme.AddColumn(grid, "colPo", "PO NO.", "PoNo", 14);
-            Theme.AddColumn(grid, "colDate", "DATE", "DateCreated", 13, "g");
-            Theme.AddColumn(grid, "colSupplier", "SUPPLIER", "Supplier", 20);
-            Theme.AddColumn(grid, "colReq", "REQUISITION", "RequisitionRef", 14);
-            Theme.AddColumn(grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 14);
-            Theme.AddColumn(grid, "colSent", "SENT TO SUPPLIER", "SentText", 14, null, true, DataGridViewContentAlignment.MiddleCenter);
-            Theme.AddColumn(grid, "colStatus", "STATUS", "Status", 9, null, true, DataGridViewContentAlignment.MiddleCenter);
-            Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 13, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            grid.ReadOnly = true;
+            Theme.AddColumn(grid, "colPo", "PO NO.", "PoNo", 12);
+            Theme.AddColumn(grid, "colPr", "PURCH. REQ.", "PrNo", 12);
+            Theme.AddColumn(grid, "colDate", "DATE", "DateCreated", 10, "MMM dd, yyyy");
+            Theme.AddColumn(grid, "colSupplier", "SUPPLIER", "Supplier", 18);
+            Theme.AddColumn(grid, "colReq", "REQUISITION", "RequisitionRef", 12);
+            Theme.AddColumn(grid, "colStatus", "STATUS", "Status", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 12);
+            Theme.AddColumn(grid, "colExp", "EXPECTED", "ExpectedDate", 10, "MMM dd, yyyy");
+            Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 10, "N2", true, DataGridViewContentAlignment.MiddleRight);
 
             grid.CellFormatting += OnCellFormatting;
+            grid.SelectionChanged += (s, e) => OnSelectionChanged();
 
             card.Controls.Add(grid);
             card.Controls.Add(Theme.MakeSectionTitle("Purchase orders"));
+            return card;
+        }
+
+        private Control BuildItemsCard()
+        {
+            Panel card = Theme.MakeCard(new Padding(10));
+
+            gridItems = new DataGridView();
+            Theme.StyleGrid(gridItems);
+            gridItems.ReadOnly = true;
+            Theme.AddColumn(gridItems, "iSku", "SKU", "Sku", 16);
+            Theme.AddColumn(gridItems, "iBrand", "BRAND", "Brand", 14);
+            Theme.AddColumn(gridItems, "iProd", "PRODUCT", "Product", 26);
+            Theme.AddColumn(gridItems, "iSize", "SIZE", "Size", 8, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(gridItems, "iQty", "QTY", "Quantity", 8, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(gridItems, "iCost", "UNIT COST", "UnitCost", 14, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            Theme.AddColumn(gridItems, "iLine", "AMOUNT", "LineTotal", 14, "N2", true, DataGridViewContentAlignment.MiddleRight);
+
+            lblInfo = new Label
+            {
+                Dock = DockStyle.Bottom,
+                Height = 26,
+                ForeColor = Theme.Muted,
+                Font = Theme.FontSmall,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            card.Controls.Add(gridItems);
+            card.Controls.Add(lblInfo);
+            card.Controls.Add(Theme.MakeSectionTitle("Items of the selected purchase order (only what is short)"));
             return card;
         }
 
@@ -253,8 +323,14 @@ namespace SolemateKicks
             PurchaseOrderRow row = grid.Rows[e.RowIndex].DataBoundItem as PurchaseOrderRow;
             if (row == null) return;
 
+            e.Value = row.Status == "PendingApproval" ? "Pending approval" : row.Status;
+            e.FormattingApplied = true;
+
             e.CellStyle.ForeColor = row.Status == "Received" ? Theme.Ok
-                                  : row.Status == "Ordered" ? Theme.Warn : Theme.Muted;
+                                  : row.Status == "Approved" ? Theme.Ok
+                                  : row.Status == "Ordered" ? Theme.Ink
+                                  : row.Status == "PendingApproval" ? Theme.Warn
+                                  : row.Status == "Rejected" ? Theme.Red : Theme.Muted;
             e.CellStyle.Font = Theme.FontBold;
         }
 
@@ -292,8 +368,36 @@ namespace SolemateKicks
                         }
                     }
                 }
+                OnSelectionChanged();
             }
             catch (Exception ex) { ShowError(ex); }
+        }
+
+        private void OnSelectionChanged()
+        {
+            PurchaseOrderRow sel = Selected;
+            bool has = sel != null;
+            string st = has ? sel.Status : "";
+
+            btnSend.Enabled = has && st == "Approved";
+            btnCancelPo.Enabled = has && (st == "PendingApproval" || st == "Approved" || st == "Rejected");
+            btnPrint.Enabled = has;
+            btnEmail.Enabled = has;
+
+            try
+            {
+                gridItems.DataSource = has ? PurchasingService.GetOrderItems(sel.PurchaseOrderId) : new List<PoItemRow>();
+            }
+            catch (Exception ex) { ShowError(ex); }
+
+            if (!has) { lblInfo.Text = ""; return; }
+
+            string info = "Created by " + sel.CreatedBy;
+            if (!string.IsNullOrEmpty(sel.PrNo)) info += "   |   from purchase requisition " + sel.PrNo;
+            if (st == "Approved") info += "   |   budget approved by the Head - ready to send to the supplier";
+            else if (st == "Ordered") info += "   |   sent to the supplier - receive and inspect it in the DELIVERY module";
+            else if (st == "Received") info += "   |   goods received through Delivery";
+            lblInfo.Text = info;
         }
 
         // ==================================================================
@@ -304,7 +408,7 @@ namespace SolemateKicks
             LoadData();
         }
 
-        // New PO: choose a supplier and tick the items to order from any approved request, then create the PO
+        // New PO: choose an approved requisition, record the supplier quotations, create the PO from the lowest one
         private void OnNew(object sender, EventArgs e)
         {
             try
@@ -312,7 +416,7 @@ namespace SolemateKicks
                 List<PendingItemRow> pending = PurchasingService.GetPendingItems();
                 if (pending.Count == 0)
                 {
-                    MessageBox.Show(this, "There are no approved requests with items left to order.",
+                    MessageBox.Show(this, "There are no approved requisitions waiting for a purchase order.",
                         "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -325,55 +429,63 @@ namespace SolemateKicks
                     return;
                 }
 
-                using (NewPoDialog dlg = new NewPoDialog(pending, suppliers))
+                using (QuotationsDialog dlg = new QuotationsDialog(reqs, suppliers, _user))
                 {
-                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                    PurchasingService.CreateOrder(dlg.SupplierIdValue, dlg.PaymentTermsValue, dlg.SelectedItems, _user);
-                    LoadData();
+                    dlg.ShowDialog(this);   // the dialog creates the PO itself when CREATE PO is pressed
                 }
+                LoadData();
             }
             catch (Exception ex) { ShowError(ex); }
         }
 
-        // Send PO: make the written purchase order, open an email to the supplier, then record that it was sent
         private void OnSend(object sender, EventArgs e)
         {
-            PurchaseOrderRow po = Selected;
-            if (po == null)
-            {
-                MessageBox.Show(this, "Select a purchase order first.", "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (po.Status != "Ordered")
-            {
-                MessageBox.Show(this, "Only a purchase order with status Ordered can be sent.",
-                    "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
+            PurchaseOrderRow sel = Selected;
+            if (sel == null) return;
+            if (MessageBox.Show(this, "Send " + sel.PoNo + " to " + sel.Supplier + "?\r\n\r\n" +
+                    "An expected delivery linked to this PO will be created in the DELIVERY module.",
+                    "Send to supplier", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             try
             {
-                PurchaseOrderHeader header = PurchasingService.GetOrderHeader(po.PurchaseOrderId);
-                List<PurchaseOrderItemRow> items = PurchasingService.GetOrderItems(po.PurchaseOrderId);
+                SendResult res = PurchasingService.SendOrder(sel.PurchaseOrderId, _user);
+                LoadData();
 
-                string path = PoDocument.Save(header, items, _user.FullName);
-                PoDocument.Open(path);
+                DialogResult ask = MessageBox.Show(this,
+                    sel.PoNo + " is now ORDERED.\r\nDelivery " + res.DeliveryRef + " is expected on " + res.ExpectedDate.ToString("MMM dd, yyyy") + ".\r\n\r\n" +
+                    "Open an e-mail to the supplier with this order now?",
+                    "Sent", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                if (ask == DialogResult.Yes) PurchaseOrderPrinter.Email(sel.PurchaseOrderId);
+            }
+            catch (Exception ex) { ShowError(ex); }
+        }
 
-                if (header.SupplierEmail.Length > 0)
-                    PoDocument.OpenEmail(header, _user.FullName);
-
-                string msg = "The written purchase order was saved here:\r\n" + path + "\r\n\r\n"
-                    + (header.SupplierEmail.Length > 0
-                        ? "A new email to " + header.SupplierEmail + " was opened. Print the order to PDF from the browser and attach it to the email, then send it.\r\n\r\n"
-                        : "This supplier has no email address. Print the order and send it another way.\r\n\r\n")
-                    + "Was the purchase order sent to the supplier?";
-
-                if (MessageBox.Show(this, msg, "Send purchase order", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                    return;
-
-                PurchasingService.MarkOrderSent(po.PurchaseOrderId, _user);
+        private void OnCancelPo(object sender, EventArgs e)
+        {
+            PurchaseOrderRow sel = Selected;
+            if (sel == null) return;
+            if (MessageBox.Show(this, "Cancel " + sel.PoNo + "?", "Cancel purchase order",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
+            {
+                PurchasingService.CancelOrder(sel.PurchaseOrderId, _user);
                 LoadData();
             }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        private void OnPrint(object sender, EventArgs e)
+        {
+            PurchaseOrderRow sel = Selected;
+            if (sel == null) return;
+            try { PurchaseOrderPrinter.Print(sel.PurchaseOrderId); }
+            catch (Exception ex) { ShowError(ex); }
+        }
+
+        private void OnEmail(object sender, EventArgs e)
+        {
+            PurchaseOrderRow sel = Selected;
+            if (sel == null) return;
+            try { PurchaseOrderPrinter.Email(sel.PurchaseOrderId); }
             catch (Exception ex) { ShowError(ex); }
         }
 
