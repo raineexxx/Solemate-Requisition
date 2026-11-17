@@ -21,6 +21,7 @@ namespace SolemateKicks
         public string ReviewNote { get; set; }
         public string CreatedBy { get; set; }
         public string PrNo { get; set; }
+        public DateTime? DateSent { get; set; }
     }
 
     /// <summary>A purchase requisition: the shortage of an approved requisition, waiting for the Head's budget approval.</summary>
@@ -126,19 +127,6 @@ namespace SolemateKicks
         }
     }
 
-    /// <summary>One supplier (name, address, email, country).</summary>
-    public class SupplierRow
-    {
-        public int ProductId { get; set; }
-        public string Sku { get; set; }
-        public string Brand { get; set; }
-        public string Product { get; set; }
-        public int Size { get; set; }
-        public int Requested { get; set; }
-        public int FreeStock { get; set; }
-        public int Shortage { get; set; }
-    }
-
     /// <summary>One supplier's quotation for the whole shortage of a requisition.</summary>
     public class QuoteRow
     {
@@ -224,10 +212,10 @@ namespace SolemateKicks
         public string PaymentTerms { get; set; }
         public int LeadTimeDays { get; set; }
 
-        // Label shown in the supplier dropdown.
+        // Label shown in the supplier dropdown (the country shows which supplier is the UK one and which is the Vietnam one).
         public override string ToString()
         {
-            return SupplierName;
+            return string.IsNullOrEmpty(Country) ? SupplierName : SupplierName + "  (" + Country + ")";
         }
     }
 
@@ -282,9 +270,10 @@ namespace SolemateKicks
         }
 
         /// <summary>
-        /// Creates a PO for one supplier from the items the Head selected (each with the quantity to order),
-        /// at the products' current prices. Head only (checked in SQL). Payment terms may be blank.
-        /// Returns the new PurchaseOrderId.
+        /// ITEM-SELECTION FLOW: creates a PO for one supplier from the approved items the Head ticked (each with the
+        /// quantity to order), at the products' current prices. Head only (checked in SQL).
+        /// Payment terms may be blank. Returns the new PurchaseOrderId.
+        /// Calls usp_PurCreateOrder (13_SelectItems.sql).
         /// </summary>
         public static int CreateOrder(int supplierId, string paymentTerms, IEnumerable<PendingItemRow> items, AppUser user)
         {
@@ -310,16 +299,6 @@ namespace SolemateKicks
             using (SolemateDataContext db = new SolemateDataContext())
             {
                 return db.ExecuteQuery<QuoteRow>("EXEC dbo.usp_PurGetQuotes {0}", requisitionId).ToList();
-            }
-        }
-
-        /// <summary>Manager: creates the approved PO from the budget-approved purchase requisition. Returns the PurchaseOrderId.</summary>
-        public static int CreateOrder(int requisitionId, int supplierId, AppUser user)
-        {
-            using (SolemateDataContext db = new SolemateDataContext())
-            {
-                return db.ExecuteQuery<int>("EXEC dbo.usp_PurCreateOrder {0}, {1}, {2}",
-                    requisitionId, supplierId, user.UserId).First();
             }
         }
 
