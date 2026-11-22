@@ -413,10 +413,11 @@ namespace SolemateKicks
         {
             try
             {
-                List<PendingItemRow> pending = PurchasingService.GetPendingItems();
-                if (pending.Count == 0)
+               
+                List<ApprovedRequisitionRow> reqs = PurchasingService.GetApprovedRequisitions();
+                if (reqs.Count == 0)
                 {
-                    MessageBox.Show(this, "There are no approved requisitions waiting for a purchase order.",
+                    MessageBox.Show(this, "There are no approved requisitions that need purchasing.",
                         "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }

@@ -126,18 +126,7 @@ namespace SolemateKicks
         }
     }
 
-    /// <summary>One supplier (name, address, email, country).</summary>
-    public class SupplierRow
-    {
-        public int ProductId { get; set; }
-        public string Sku { get; set; }
-        public string Brand { get; set; }
-        public string Product { get; set; }
-        public int Size { get; set; }
-        public int Requested { get; set; }
-        public int FreeStock { get; set; }
-        public int Shortage { get; set; }
-    }
+    
 
     /// <summary>One supplier's quotation for the whole shortage of a requisition.</summary>
     public class QuoteRow
