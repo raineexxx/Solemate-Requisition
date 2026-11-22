@@ -1,7 +1,11 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Net;
+using System.Text;
 using System.Windows.Forms;
 
 // These aliases prevent "ambiguous reference" errors with System.Windows.Forms.VisualStyles
@@ -10,246 +14,285 @@ using ComboBox = System.Windows.Forms.ComboBox;
 
 namespace SolemateKicks
 {
-    // ======================================================================
-    //  New purchase order: the Head picks a supplier, then ticks the items to order from any approved request
-    //  and types the quantity of each. One PO = one supplier, and may mix items of several requests.
-    //  (The file keeps its old name so the project file does not change.)
-    // ======================================================================
-    public class NewPoDialog : Form
+    /// <summary>
+    /// A small read-only window with one grid: used to show the items of a purchase requisition or of a purchase order.
+    /// The caller adds the columns in the "buildColumns" action.
+    /// </summary>
+    public class GridDialog : Form
     {
-        private const string AllRequests = "All requests";
-
-        private readonly List<PendingItemRow> _all;
-        private readonly ComboBox _supplier = new ComboBox();
-        private readonly ComboBox _filter = new ComboBox();
-        private readonly TextBox _terms = new TextBox();
-        private readonly DataGridView _grid = new DataGridView();
-        private readonly Label _total = new Label();
-        private BindingList<PendingItemRow> _view;
-
-        public int SupplierIdValue { get { return ((SupplierRow)_supplier.SelectedItem).SupplierId; } }
-        public string PaymentTermsValue { get { return _terms.Text.Trim(); } }
-
-        /// <summary>The ticked items with their quantities (across all requests, not only the ones shown).</summary>
-        public List<PendingItemRow> SelectedItems
+        public GridDialog(string title, string caption, IList data, Action<DataGridView> buildColumns)
         {
-            get { return _all.FindAll(delegate (PendingItemRow r) { return r.Selected && r.OrderQty > 0; }); }
-        }
-
-        public NewPoDialog(List<PendingItemRow> pending, List<SupplierRow> suppliers)
-        {
-            _all = pending;
-            foreach (PendingItemRow r in _all) r.OrderQty = r.RemainingQty;   // default: order everything that is left
-
-            Text = "New purchase order";
-            ClientSize = new Size(1000, 640);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
+            Text = title;
+            ClientSize = new Size(820, 440);
+            MinimumSize = new Size(640, 360);
             StartPosition = FormStartPosition.CenterParent;
-            BackColor = Theme.White;
+            BackColor = Theme.Canvas;
             Font = Theme.FontBody;
+            ShowInTaskbar = false;
 
-            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 8, BackColor = Theme.Red });
-
-            Controls.Add(new Label { Text = "Supplier", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 30) });
-            _supplier.DropDownStyle = ComboBoxStyle.DropDownList;
-            _supplier.Location = new Point(130, 26);
-            _supplier.Width = 400;
-            foreach (SupplierRow s in suppliers) _supplier.Items.Add(s);    // label comes from SupplierRow.ToString()
-            _supplier.SelectedIndex = 0;
-            Controls.Add(_supplier);
-
-            Controls.Add(new Label { Text = "Payment terms", Font = Theme.FontBold, AutoSize = true, Location = new Point(560, 30) });
-            _terms.MaxLength = 100;
-            _terms.BorderStyle = BorderStyle.FixedSingle;
-            _terms.Location = new Point(680, 26);
-            _terms.Width = 300;
-            Controls.Add(_terms);
-
-            Controls.Add(new Label { Text = "Show request", Font = Theme.FontBold, AutoSize = true, Location = new Point(20, 72) });
-            _filter.DropDownStyle = ComboBoxStyle.DropDownList;
-            _filter.Location = new Point(130, 68);
-            _filter.Width = 400;
-            _filter.Items.Add(AllRequests);
-            List<string> seen = new List<string>();
-            foreach (PendingItemRow r in _all)
+            Label lbl = new Label
             {
-                string label = r.RefNo + "  -  " + r.Branch;
-                if (!seen.Contains(label)) { seen.Add(label); _filter.Items.Add(label); }
-            }
-            _filter.SelectedIndex = 0;
-            Controls.Add(_filter);
-
-            Button all = Theme.MakeButton("TICK ALL SHOWN", 170, false, OnTickAll);
-            all.Location = new Point(560, 64);
-            Button none = Theme.MakeButton("CLEAR", 100, false, OnClear);
-            none.Location = new Point(740, 64);
-            Controls.Add(all);
-            Controls.Add(none);
-
-            Panel gridHost = new Panel { Location = new Point(20, 110), Size = new Size(960, 430) };
-            Theme.StyleGrid(_grid);
-            _grid.AutoGenerateColumns = false;
-            _grid.ReadOnly = false;
-            _grid.AllowUserToAddRows = false;
-            _grid.AllowUserToDeleteRows = false;
-            _grid.Dock = DockStyle.Fill;
-
-            _grid.Columns.Add(new DataGridViewCheckBoxColumn
-            {
-                Name = "colPick",
-                HeaderText = "ORDER",
-                DataPropertyName = "Selected",
-                FillWeight = 8
-            });
-            _grid.Columns.Add(TextCol("colReq", "REQUEST", "RefNo", 17, true, false));
-            _grid.Columns.Add(TextCol("colBranch", "BRANCH", "Branch", 12, true, false));
-            _grid.Columns.Add(TextCol("colItem", "ITEM", "ProductName", 26, true, false));
-            _grid.Columns.Add(TextCol("colAsked", "REQUESTED", "RequestedQty", 10, true, true));
-            _grid.Columns.Add(TextCol("colLeft", "LEFT TO ORDER", "RemainingQty", 11, true, true));
-            _grid.Columns.Add(TextCol("colQty", "QTY TO ORDER", "OrderQty", 11, false, true));
-            DataGridViewTextBoxColumn price = TextCol("colPrice", "PRICE (PHP)", "UnitPrice", 11, true, true);
-            price.DefaultCellStyle.Format = "N2";
-            _grid.Columns.Add(price);
-            DataGridViewTextBoxColumn line = TextCol("colLine", "AMOUNT (PHP)", "LineTotal", 12, true, true);
-            line.DefaultCellStyle.Format = "N2";
-            _grid.Columns.Add(line);
-
-            _grid.CurrentCellDirtyStateChanged += OnDirty;
-            _grid.CellValueChanged += delegate { _grid.Invalidate(); UpdateTotal(); };
-            _grid.DataError += OnDataError;
-            gridHost.Controls.Add(_grid);
-            Controls.Add(gridHost);
-
-            _total.Font = Theme.FontBold;
-            _total.AutoSize = false;
-            _total.TextAlign = ContentAlignment.MiddleRight;
-            _total.Bounds = new Rectangle(560, 548, 420, 28);
-            Controls.Add(_total);
-
-            Controls.Add(new Label
-            {
-                Text = "Tick the items to order and type the quantity. Items you leave out stay available for the next purchase order.",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Muted,
-                AutoSize = true,
-                Location = new Point(20, 552)
-            });
-
-            Button save = Theme.MakeButton("CREATE PO", 150, true, OnSave);
-            save.Location = new Point(830, 590);
-            Button cancel = Theme.MakeButton("CANCEL", 110, false, null);
-            cancel.DialogResult = DialogResult.Cancel;
-            cancel.Location = new Point(700, 590);
-            Controls.Add(save);
-            Controls.Add(cancel);
-            CancelButton = cancel;
-
-            _filter.SelectedIndexChanged += delegate { ApplyFilter(); };
-            ApplyFilter();
-        }
-
-        private static DataGridViewTextBoxColumn TextCol(string name, string header, string prop, float weight, bool readOnly, bool right)
-        {
-            DataGridViewTextBoxColumn c = new DataGridViewTextBoxColumn
-            {
-                Name = name,
-                HeaderText = header,
-                DataPropertyName = prop,
-                ReadOnly = readOnly,
-                FillWeight = weight
+                Text = caption,
+                Dock = DockStyle.Top,
+                Height = 40,
+                Padding = new Padding(12, 10, 12, 0),
+                Font = Theme.FontBold,
+                ForeColor = Theme.Ink
             };
-            if (right) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            return c;
-        }
 
-        // shows only the items of the chosen request (the ticks of hidden items are kept)
-        private void ApplyFilter()
+            DataGridView grid = new DataGridView();
+            Theme.StyleGrid(grid);
+            buildColumns(grid);
+            grid.DataSource = data;
+
+            Button btnClose = Theme.MakeButton("CLOSE", 100, true, delegate { Close(); });
+            Panel bottom = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Theme.White, Padding = new Padding(8, 8, 8, 0) };
+            btnClose.Dock = DockStyle.Right;
+            bottom.Controls.Add(btnClose);
+
+            Panel card = Theme.MakeCard(new Padding(10));
+            card.Controls.Add(grid);
+
+            Controls.Add(card);
+            Controls.Add(bottom);
+            Controls.Add(lbl);
+            CancelButton = btnClose;
+        }
+    }
+
+    /// <summary>One row of the supplier comparison grid (UI only, so get-only properties are fine here).</summary>
+    public class QuoteView
+    {
+        public int SupplierId { get; private set; }
+        public string SupplierName { get; private set; }
+        public string Country { get; private set; }
+        public string PaymentTerms { get; private set; }
+        public string LeadTime { get; private set; }
+        public string Coverage { get; private set; }
+        public decimal Total { get; private set; }
+        public bool Complete { get; private set; }
+        public bool Lowest { get; private set; }
+        public string LowestText { get { return Lowest ? "LOWEST" : ""; } }
+
+        public QuoteView(QuoteRow q, bool lowest)
         {
-            _grid.EndEdit();
-            string pick = _filter.SelectedItem as string;
-            List<PendingItemRow> rows = _all.FindAll(delegate (PendingItemRow r)
+            SupplierId = q.SupplierId;
+            SupplierName = q.SupplierName;
+            Country = q.Country;
+            PaymentTerms = q.PaymentTerms;
+            LeadTime = q.LeadTimeDays > 0 ? q.LeadTimeDays + " days" : "";
+            Coverage = q.Coverage();
+            Total = q.Total;
+            Complete = q.IsComplete();
+            Lowest = lowest;
+        }
+    }
+
+    /// <summary>
+    /// Paper 3.3 step 4: the suppliers (UK and Vietnam) are compared and the lowest price is chosen.
+    /// The prices come from each supplier's price list (SUPPLIERS tab); nothing is typed per order.
+    /// The Head picks the supplier and the purchase order is created from the purchase requisition.
+    /// </summary>
+    public class QuotesDialog : Form
+    {
+        private readonly PurchaseRequisitionRow _pr;
+        private readonly List<QuoteView> _views = new List<QuoteView>();
+        private DataGridView _grid;
+
+        public int SupplierIdValue { get; private set; }
+
+        public QuotesDialog(PurchaseRequisitionRow pr, List<QuoteRow> quotes)
+        {
+            _pr = pr;
+
+            Text = "Supplier prices - " + pr.PrNo;
+            ClientSize = new Size(900, 460);
+            MinimumSize = new Size(760, 380);
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Theme.Canvas;
+            Font = Theme.FontBody;
+            ShowInTaskbar = false;
+
+            // the first complete quotation is the cheapest (the list comes sorted)
+            bool lowestDone = false;
+            foreach (QuoteRow q in quotes)
             {
-                return pick == null || pick == AllRequests || (r.RefNo + "  -  " + r.Branch) == pick;
-            });
-            _view = new BindingList<PendingItemRow>(rows);
-            _grid.DataSource = _view;
-            UpdateTotal();
-        }
-
-        private void OnTickAll(object sender, EventArgs e)
-        {
-            _grid.EndEdit();
-            foreach (PendingItemRow r in _view) r.Selected = true;
-            _grid.Refresh();
-            UpdateTotal();
-        }
-
-        private void OnClear(object sender, EventArgs e)
-        {
-            _grid.EndEdit();
-            foreach (PendingItemRow r in _all) r.Selected = false;
-            _grid.Refresh();
-            UpdateTotal();
-        }
-
-        // a tick is saved at once, so the total updates without leaving the cell
-        private void OnDirty(object sender, EventArgs e)
-        {
-            if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewCheckBoxCell)
-                _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
-        }
-
-        private void UpdateTotal()
-        {
-            decimal sum = 0;
-            int count = 0;
-            foreach (PendingItemRow r in _all)
-            {
-                if (!r.Selected || r.OrderQty <= 0) continue;
-                sum += r.LineTotal;
-                count++;
+                bool lowest = !lowestDone && q.IsComplete();
+                if (lowest) lowestDone = true;
+                _views.Add(new QuoteView(q, lowest));
             }
-            _total.Text = count + " item(s) selected   |   Total: PHP " + sum.ToString("N2");
+
+            BuildUi();
         }
 
-        private void OnDataError(object sender, DataGridViewDataErrorEventArgs e)
+        private void BuildUi()
         {
-            e.ThrowException = false;
-            MessageBox.Show(this, "Please enter the quantity as a whole number, for example 12.",
-                "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-
-        private void OnSave(object sender, EventArgs e)
-        {
-            _grid.EndEdit();
-
-            string problem = null;
-            if (_supplier.SelectedItem == null)
-                problem = "Please choose a supplier.";
-            else if (SelectedItems.Count == 0)
-                problem = "Tick at least one item to order, with a quantity of 1 or more.";
-            else
+            Label lbl = new Label
             {
-                foreach (PendingItemRow r in _all)
-                {
-                    if (!r.Selected) continue;
-                    if (r.OrderQty < 1 || r.OrderQty > r.RemainingQty)
-                    {
-                        problem = "\"" + r.ProductName + "\" (" + r.RefNo + "): the quantity must be from 1 to " + r.RemainingQty + ".";
-                        break;
-                    }
-                }
+                Text = _pr.PrNo + "  |  " + _pr.RequisitionRef + "  |  " + _pr.Branch + "  |  " + _pr.Items + " item(s), " + _pr.Pairs + " pair(s) to buy" + Environment.NewLine +
+                       "Prices are the suppliers' own price lists. The lowest complete total is marked LOWEST (the client's rule: choose the lowest price).",
+                Dock = DockStyle.Top,
+                Height = 58,
+                Padding = new Padding(12, 8, 12, 0),
+                Font = Theme.FontBold,
+                ForeColor = Theme.Ink
+            };
+
+            _grid = new DataGridView();
+            Theme.StyleGrid(_grid);
+            Theme.AddColumn(_grid, "colSupplier", "SUPPLIER", "SupplierName", 24);
+            Theme.AddColumn(_grid, "colCountry", "COUNTRY", "Country", 12);
+            Theme.AddColumn(_grid, "colCover", "PRICES FOUND", "Coverage", 14, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(_grid, "colTerms", "PAYMENT TERMS", "PaymentTerms", 16);
+            Theme.AddColumn(_grid, "colLead", "LEAD TIME", "LeadTime", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
+            Theme.AddColumn(_grid, "colTotal", "TOTAL (PHP)", "Total", 14, "N2", true, DataGridViewContentAlignment.MiddleRight);
+            Theme.AddColumn(_grid, "colLow", "", "LowestText", 10, null, true, DataGridViewContentAlignment.MiddleCenter);
+            _grid.DataSource = _views;
+            _grid.CellFormatting += OnCellFormatting;
+            _grid.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) OnCreate(null, EventArgs.Empty); };
+
+            Panel card = Theme.MakeCard(new Padding(10));
+            card.Controls.Add(_grid);
+
+            Button btnCreate = Theme.MakeButton("CREATE PO FOR SELECTED SUPPLIER", 290, true, OnCreate);
+            Button btnClose = Theme.MakeButton("CLOSE", 100, false, delegate { DialogResult = DialogResult.Cancel; });
+            FlowLayoutPanel bottom = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 52,
+                BackColor = Theme.White,
+                FlowDirection = FlowDirection.RightToLeft,
+                Padding = new Padding(8, 8, 8, 0)
+            };
+            bottom.Controls.Add(btnClose);
+            bottom.Controls.Add(btnCreate);
+
+            Controls.Add(card);
+            Controls.Add(bottom);
+            Controls.Add(lbl);
+            CancelButton = btnClose;
+        }
+
+        private void OnCellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            QuoteView v = _grid.Rows[e.RowIndex].DataBoundItem as QuoteView;
+            if (v == null) return;
+
+            if (v.Lowest)
+            {
+                e.CellStyle.ForeColor = Theme.Ok;
+                e.CellStyle.Font = Theme.FontBold;
             }
-
-            if (problem != null)
+            else if (!v.Complete)
             {
-                MessageBox.Show(this, problem, "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                e.CellStyle.ForeColor = Theme.Muted;   // this supplier has no price for some items
+            }
+        }
+
+        private void OnCreate(object sender, EventArgs e)
+        {
+            QuoteView v = _grid.CurrentRow == null ? null : _grid.CurrentRow.DataBoundItem as QuoteView;
+            if (v == null)
+            {
+                MessageBox.Show(this, "Select a supplier first.", "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (!v.Complete)
+            {
+                MessageBox.Show(this, v.SupplierName + " has no price for every item (" + v.Coverage + "). " +
+                    "Add the missing prices in the SUPPLIERS tab, or choose another supplier.",
+                    "Solemate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string msg = "Create the purchase order for " + v.SupplierName + "?" + Environment.NewLine +
+                         "Total: PHP " + v.Total.ToString("N2");
+            MessageBoxIcon icon = MessageBoxIcon.Question;
+
+            if (!v.Lowest)
+            {
+                msg = v.SupplierName + " is NOT the lowest price." + Environment.NewLine +
+                      "The lowest is " + LowestName() + "." + Environment.NewLine + Environment.NewLine + msg;
+                icon = MessageBoxIcon.Warning;
+            }
+
+            if (MessageBox.Show(this, msg, "Create purchase order", MessageBoxButtons.YesNo, icon) != DialogResult.Yes) return;
+
+            SupplierIdValue = v.SupplierId;
             DialogResult = DialogResult.OK;
+        }
+
+        private string LowestName()
+        {
+            foreach (QuoteView q in _views)
+                if (q.Lowest) return q.SupplierName + " (PHP " + q.Total.ToString("N2") + ")";
+            return "-";
+        }
+    }
+
+    /// <summary>
+    /// The written purchase order (paper 3.3 step 5: written purchase orders replace phone-only orders).
+    /// Saved as an HTML page that can be printed to PDF, plus an e-mail to the supplier.
+    /// </summary>
+    public static class PoPrinter
+    {
+        private static string Enc(string s) { return WebUtility.HtmlEncode(s ?? string.Empty); }
+
+        public static string Save(PoPrintHeader h, List<PoItemRow> items, string preparedBy)
+        {
+            StringBuilder b = new StringBuilder();
+            b.Append("<!DOCTYPE html><html><head><meta charset='utf-8'><title>").Append(Enc(h.PoNo)).Append("</title>");
+            b.Append("<style>body{font-family:Segoe UI,Arial,sans-serif;margin:40px;color:#222}h1{color:#C8102E;margin:0}");
+            b.Append("table{border-collapse:collapse;width:100%;margin-top:18px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}");
+            b.Append("th{background:#f3f3f3}td.n,th.n{text-align:right}.meta td{border:none;padding:2px 8px 2px 0}.sig{margin-top:60px}");
+            b.Append(".sig div{display:inline-block;width:260px;border-top:1px solid #333;margin-right:40px;padding-top:4px}</style></head><body>");
+            b.Append("<h1>PURCHASE ORDER</h1><div>Solemate Kicks</div>");
+
+            b.Append("<table class='meta'><tr><td><b>PO No.</b></td><td>").Append(Enc(h.PoNo)).Append("</td>");
+            b.Append("<td><b>Date</b></td><td>").Append(h.DateCreated.ToString("MMMM d, yyyy")).Append("</td></tr>");
+            b.Append("<tr><td><b>Supplier</b></td><td>").Append(Enc(h.Supplier)).Append(h.Country.Length > 0 ? " (" + Enc(h.Country) + ")" : "").Append("</td>");
+            b.Append("<td><b>Payment terms</b></td><td>").Append(Enc(h.PaymentTerms)).Append("</td></tr>");
+            b.Append("<tr><td><b>Address</b></td><td>").Append(Enc(h.SupplierAddress)).Append("</td>");
+            b.Append("<td><b>Expected delivery</b></td><td>").Append(h.ExpectedDate.HasValue ? h.ExpectedDate.Value.ToString("MMMM d, yyyy") : "").Append("</td></tr>");
+            b.Append("<tr><td><b>Requisition</b></td><td>").Append(Enc(h.RequisitionRef)).Append("</td>");
+            b.Append("<td><b>Deliver to</b></td><td>Solemate warehouse (for ").Append(Enc(h.DeliverTo)).Append(")</td></tr></table>");
+
+            b.Append("<table><tr><th>SKU</th><th>Brand</th><th>Product</th><th class='n'>Size (US)</th><th class='n'>Qty</th><th class='n'>Unit cost (PHP)</th><th class='n'>Amount (PHP)</th></tr>");
+            foreach (PoItemRow i in items)
+            {
+                b.Append("<tr><td>").Append(Enc(i.Sku)).Append("</td><td>").Append(Enc(i.Brand)).Append("</td><td>").Append(Enc(i.Product))
+                 .Append("</td><td class='n'>").Append(i.Size).Append("</td><td class='n'>").Append(i.Quantity)
+                 .Append("</td><td class='n'>").Append(i.UnitCost.ToString("N2")).Append("</td><td class='n'>").Append(i.LineTotal.ToString("N2")).Append("</td></tr>");
+            }
+            b.Append("<tr><th colspan='6' class='n'>TOTAL</th><th class='n'>").Append(h.Total.ToString("N2")).Append("</th></tr></table>");
+
+            b.Append("<div class='sig'><div>Prepared by: ").Append(Enc(preparedBy)).Append("</div><div>Approved by: ")
+             .Append(Enc(h.ApprovedBy.Length > 0 ? h.ApprovedBy : preparedBy)).Append("</div></div>");
+            b.Append("<p style='margin-top:30px;color:#666'>Please confirm this order and the delivery date by reply. Quote the PO number on the delivery receipt.</p>");
+            b.Append("</body></html>");
+
+            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Solemate Purchase Orders");
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, h.PoNo + ".html");
+            File.WriteAllText(path, b.ToString(), new UTF8Encoding(true));
+            return path;
+        }
+
+        public static void Open(string path)
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+
+        public static void OpenEmail(PoPrintHeader h, string fromName)
+        {
+            string subject = "Purchase order " + h.PoNo;
+            string body = "Dear " + h.Supplier + "," + Environment.NewLine + Environment.NewLine +
+                          "Please find attached our purchase order " + h.PoNo + " (payment terms: " + h.PaymentTerms + ")." + Environment.NewLine +
+                          "Kindly confirm the order and the delivery date." + Environment.NewLine + Environment.NewLine +
+                          "Regards," + Environment.NewLine + fromName + Environment.NewLine + "Solemate Kicks";
+            string uri = "mailto:" + h.SupplierEmail + "?subject=" + Uri.EscapeDataString(subject) + "&body=" + Uri.EscapeDataString(body);
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
         }
     }
 }

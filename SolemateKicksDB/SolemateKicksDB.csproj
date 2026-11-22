@@ -76,9 +76,6 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PurchaseOrderPrinter.cs" />
-    <Compile Include="PurchaseRequisitionsPanel.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
     <Compile Include="PurchasingForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -149,6 +146,8 @@
     <Content Include="Database\13_SelectItems.sql" />
     <Content Include="Database\14_ItemApproval.sql" />
     <Content Include="Database\15_PurchasingSend.sql" />
+    <Content Include="Database\16_IssuanceItemApproval.sql" />
+    <Content Include="Database\17_PurchaseRequisitions.sql" />
     <Content Include="Database\6_Delivery.sql" />
     <Content Include="Database\7_DeliveryUpgrade.sql" />
     <Content Include="Database\9_Sales.sql" />
