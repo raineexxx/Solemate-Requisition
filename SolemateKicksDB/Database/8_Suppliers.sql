@@ -1,15 +1,6 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Purchasing module - suppliers (name, address, email)
-
-   Run AFTER 4_Purchasing.sql. It works before OR after the Delivery upgrade script,
-   because the Suppliers table is shared with the Delivery module: this script creates
-   the table with ALL columns, or adds the missing ones to a table that already exists.
-   Safe to run more than once.
-   ===================================================================== */
-
 /* ---------------- TABLE (shared with Delivery) ---------------- */
 IF OBJECT_ID(N'dbo.Suppliers') IS NULL
 BEGIN
@@ -26,7 +17,6 @@ BEGIN
 END
 GO
 
-/* the table already existed (older version of this script, or the Delivery version): add whatever is missing */
 IF COL_LENGTH(N'dbo.Suppliers', N'ContactPerson') IS NULL
     ALTER TABLE dbo.Suppliers ADD ContactPerson NVARCHAR(100) NULL;
 IF COL_LENGTH(N'dbo.Suppliers', N'Phone') IS NULL
@@ -55,9 +45,6 @@ BEGIN
 END
 GO
 
-/* ---------------- PROCEDURES ---------------- */
-
-/* List suppliers. @ActiveOnly = 1 hides suppliers that were set inactive (used by the New PO dialog). */
 CREATE OR ALTER PROCEDURE dbo.usp_SupGetAll
     @ActiveOnly INT = 0
 AS
@@ -73,7 +60,6 @@ BEGIN
 END
 GO
 
-/* Add (@SupplierId = 0) or edit a supplier. Returns the SupplierId. Head / Manager only. */
 CREATE OR ALTER PROCEDURE dbo.usp_SupSave
     @SupplierId   INT,
     @SupplierName NVARCHAR(100),
@@ -129,7 +115,6 @@ BEGIN
 END
 GO
 
-/* Delete a supplier. Not allowed when purchase orders or deliveries already use it. Head / Manager only. */
 CREATE OR ALTER PROCEDURE dbo.usp_SupDelete
     @SupplierId INT,
     @UserId     INT
@@ -147,14 +132,13 @@ BEGIN
         DELETE FROM dbo.Suppliers WHERE SupplierId = @SupplierId;
     END TRY
     BEGIN CATCH
-        IF ERROR_NUMBER() = 547   -- foreign key: purchase orders or deliveries use this supplier
+        IF ERROR_NUMBER() = 547   
             THROW 50015, N'This supplier is used by purchase orders or deliveries, so it cannot be deleted.', 1;
         THROW;
     END CATCH
 END
 GO
 
-/* Create a PO from an approved requisition, for a chosen (active) supplier. Returns the new PurchaseOrderId. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @RequisitionId INT,
     @SupplierId    INT,
@@ -197,9 +181,7 @@ BEGIN
 END
 GO
 
-/* ---------------- SUPPLIER LIST (same for everyone) ----------------
-   Adds each supplier only when its name is not in the table yet, so it is safe to run again
-   and it never creates duplicates or changes suppliers that already exist. */
+
 INSERT INTO dbo.Suppliers (SupplierName, [Address], Email)
 SELECT v.SupplierName, v.[Address], v.Email
 FROM (VALUES
