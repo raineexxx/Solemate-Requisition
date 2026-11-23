@@ -1,26 +1,11 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Purchasing - the Head chooses WHICH items to order, from one or many approved requests
-
-   Run AFTER 12_SimplePO.sql. It replaces usp_PurCreateOrder (new parameters) and
-   usp_PurGetOrders, usp_PurGetOrderHeader and usp_SupOrderHistory (so a PO that holds items
-   of several requests shows all their reference numbers). Safe to run more than once.
-
-   How it works
-   - Every item of an approved requisition can be ordered in full or in part.
-   - What is already on a PO (not cancelled) is subtracted, so the rest stays available
-     for the next PO, even for a different supplier.
-   - One PO has one supplier and may mix items from several requests.
-   - The PO price is the product's current price (Products.Price) until a supplier price list is added.
-   ===================================================================== */
 
 IF COL_LENGTH(N'dbo.PurchaseOrderItems', N'RequisitionItemId') IS NULL
     ALTER TABLE dbo.PurchaseOrderItems ADD RequisitionItemId INT NULL;
 GO
 
-/* product label view (also created by 11_Quotations.sql; this keeps this script independent) */
 DECLARE @col sysname =
     CASE WHEN COL_LENGTH(N'dbo.Products', N'ProductName') IS NOT NULL THEN N'ProductName'
          WHEN COL_LENGTH(N'dbo.Products', N'Name')        IS NOT NULL THEN N'Name'
@@ -32,7 +17,6 @@ DECLARE @sql NVARCHAR(MAX) =
 EXEC (@sql);
 GO
 
-/* Every item of every approved requisition, with how much of it is already on a PO */
 CREATE OR ALTER VIEW dbo.vw_PurPendingItems
 AS
 SELECT ri.ItemId AS RequisitionItemId,
@@ -116,8 +100,6 @@ BEGIN
 END
 GO
 
-/* Create a PO for ONE supplier from the items the Head selected. Head only. Returns the new PurchaseOrderId.
-   @Items is XML text: <items><i r="RequisitionItemId" q="QuantityToOrder"/>...</items> */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @SupplierId   INT,
     @PaymentTerms NVARCHAR(100),
