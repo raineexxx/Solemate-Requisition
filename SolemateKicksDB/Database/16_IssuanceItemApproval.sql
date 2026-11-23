@@ -1,21 +1,6 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Issuance - follow the item-by-item approval and close the requisition on acknowledgment
-
-   Run AFTER 10_Issuance.sql and 14_ItemApproval.sql. Safe to run more than once.
-
-   What it changes (only the Issuance procedures of 10_Issuance.sql)
-   1. Only APPROVED items are listed, reserved and issued. A rejected item of a partly approved
-      requisition is never reserved or issued.
-   2. The requisition is closed when the branch SIGNS for the last issuance (paper 3.2 / Figure 2),
-      not when the items are issued. Stock is still deducted at issuance (paper 3.6).
-   3. usp_IssAcknowledge now returns one row (Closed = 1 when this signature closed the requisition).
-      IssuanceService.Acknowledge reads that row; before, the procedure returned nothing and the
-      screen failed with "Sequence contains no elements" right after saving the signature.
-   ===================================================================== */
-
 IF COL_LENGTH(N'dbo.RequisitionItems', N'ItemStatus') IS NULL
 BEGIN
     RAISERROR('Run 14_ItemApproval.sql first: RequisitionItems.ItemStatus was not found.', 16, 1);
