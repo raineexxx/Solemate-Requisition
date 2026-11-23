@@ -18,7 +18,6 @@ JOIN dbo.Requisitions r ON r.RequisitionId = ri.RequisitionId
 WHERE ri.ItemStatus = N'Pending' AND r.[Status] IN (N'Approved', N'Rejected');
 GO
 
-/* Purchasing: only APPROVED items of approved requisitions can be ordered */
 CREATE OR ALTER VIEW dbo.vw_PurPendingItems
 AS
 SELECT ri.ItemId AS RequisitionItemId,
@@ -30,7 +29,7 @@ SELECT ri.ItemId AS RequisitionItemId,
        p.ProductName,
        ri.Quantity AS RequestedQty,
        CASE
-           -- an old PO (made before item selection existed) covered the whole requisition
+           
            WHEN EXISTS (SELECT 1 FROM dbo.PurchaseOrders po
                         WHERE po.RequisitionId = ri.RequisitionId AND po.[Status] <> N'Cancelled'
                           AND NOT EXISTS (SELECT 1 FROM dbo.PurchaseOrderItems x
@@ -72,9 +71,6 @@ BEGIN
 END
 GO
 
-/* The Head saves the decision for every item of a pending requisition. Head only.
-   @Decisions is XML text: <items><d i="ItemId" s="Approved|Rejected" r="reason"/>...</items>
-   A rejected item needs a reason. Returns one row: RefNo, Status, ApprovedCount, RejectedCount, ShortCount. */
 CREATE OR ALTER PROCEDURE dbo.usp_ReviewRequisition
     @RequisitionId INT,
     @HeadId        INT,
@@ -169,7 +165,6 @@ BEGIN
 END
 GO
 
-/* Whole-request approve (old behaviour) - now also marks every item approved */
 CREATE OR ALTER PROCEDURE dbo.usp_ApproveRequisition
     @RequisitionId INT,
     @HeadId        INT
