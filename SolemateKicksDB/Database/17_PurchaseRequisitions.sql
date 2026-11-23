@@ -1,27 +1,6 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Purchasing - follows the analysis paper (3.2 step 5 and 3.3):
-
-     shortage of an approved requisition  ->  PURCHASE REQUISITION (created by the system)
-       -> Head checks the budget:  Approve  /  Hold (the branch is told why)
-       -> supplier prices compared (UK and Vietnam), lowest total is highlighted
-       -> Head creates the PURCHASE ORDER for the chosen supplier (supplier's prices + payment terms)
-       -> written PO is sent to the supplier -> expected delivery appears for the Manager (Delivery module)
-
-   RUN THIS LAST: after 6_Delivery, 8_Suppliers, 10_Issuance, 13_SelectItems, 14_ItemApproval and 16_IssuanceItemApproval.
-   Safe to run more than once.
-
-   Things this script (re)defines - tell me if a classmate's script defines the same names:
-     tables   PurchaseRequisitions, PurchaseRequisitionItems, SupplierPrices (only created when missing)
-     procs    usp_IssReserve (same as 16_ + creates/refreshes the purchase requisition for the shortage)
-              usp_PurEnsurePR, usp_PurGetPRs, usp_PurGetPRItems, usp_PurDecidePR, usp_PurGetQuotes,
-              usp_PurCreateOrderFromPr, usp_PurGetOrders, usp_PurGetOrderItems, usp_PurGetPrintHeader,
-              usp_PurSend, usp_PurCancel, usp_PurGetPendingCount,
-              usp_SupPriceList, usp_SupPriceSave, usp_SupPriceDelete   (supplier price list = table SupplierPrices)
-   ===================================================================== */
-
 DECLARE @missing NVARCHAR(500) = N'';
 
 IF OBJECT_ID(N'dbo.PurchaseOrders', N'U') IS NULL SET @missing = @missing + N' [PurchaseOrders table]';
@@ -39,11 +18,10 @@ IF COL_LENGTH(N'dbo.PurchaseOrderItems', N'RequisitionItemId') IS NULL SET @miss
 IF @missing <> N''
 BEGIN
     RAISERROR(N'Run the earlier scripts first. Missing:%s. Nothing was changed.', 16, 1, @missing);
-    SET NOEXEC ON;   -- skips the rest of this script
+    SET NOEXEC ON;  
 END
 GO
 
-/* ---------- missing columns ---------- */
 IF COL_LENGTH(N'dbo.Suppliers', N'Country')      IS NULL ALTER TABLE dbo.Suppliers ADD Country NVARCHAR(50) NULL;
 IF COL_LENGTH(N'dbo.Suppliers', N'PaymentTerms') IS NULL ALTER TABLE dbo.Suppliers ADD PaymentTerms NVARCHAR(100) NULL;
 IF COL_LENGTH(N'dbo.Suppliers', N'LeadTimeDays') IS NULL ALTER TABLE dbo.Suppliers ADD LeadTimeDays INT NOT NULL CONSTRAINT DF_Suppliers_Lead DEFAULT 0;
@@ -53,13 +31,11 @@ IF COL_LENGTH(N'dbo.PurchaseOrders', N'ExpectedDate') IS NULL ALTER TABLE dbo.Pu
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'PrId')         IS NULL ALTER TABLE dbo.PurchaseOrders ADD PrId INT NULL;
 GO
 
-/* ---------- repair tables left by an older version of the Purchasing scripts ---------- */
--- the supplier price list keeps its rows; it only gets the missing column
+
 IF OBJECT_ID(N'dbo.SupplierPrices', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SupplierPrices', N'QuotedById') IS NULL
     ALTER TABLE dbo.SupplierPrices ADD QuotedById INT NULL;
 GO
 
--- the purchase requisition tables must have the columns used below
 IF OBJECT_ID(N'dbo.PurchaseRequisitions', N'U') IS NOT NULL
    AND (COL_LENGTH(N'dbo.PurchaseRequisitions', N'PrId') IS NULL
         OR COL_LENGTH(N'dbo.PurchaseRequisitions', N'PrNo') IS NULL
@@ -74,7 +50,6 @@ BEGIN
 END
 GO
 
--- an old PurchaseRequisitionItems (no Id / RequisitionItemId column) is rebuilt, but only when it is empty
 IF OBJECT_ID(N'dbo.PurchaseRequisitionItems', N'U') IS NOT NULL
    AND (COL_LENGTH(N'dbo.PurchaseRequisitionItems', N'Id') IS NULL
         OR COL_LENGTH(N'dbo.PurchaseRequisitionItems', N'RequisitionItemId') IS NULL)
@@ -89,7 +64,6 @@ BEGIN
 END
 GO
 
-/* ---------- tables ---------- */
 IF OBJECT_ID(N'dbo.PurchaseRequisitions', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PurchaseRequisitions
@@ -123,7 +97,6 @@ BEGIN
 END
 GO
 
-/* Supplier price list: what each supplier charges for each product (loaded once, not typed per order) */
 IF OBJECT_ID(N'dbo.SupplierPrices', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.SupplierPrices
@@ -138,7 +111,6 @@ BEGIN
 END
 GO
 
-/* ---------- supplier price list procedures (used by the SUPPLIERS tab) ---------- */
 CREATE OR ALTER PROCEDURE dbo.usp_SupPriceList
     @SupplierId INT
 AS
@@ -188,7 +160,6 @@ BEGIN
 END
 GO
 
-/* ---------- quotation comparison per purchase requisition: one row per supplier ---------- */
 CREATE OR ALTER VIEW dbo.vw_PurPrQuote
 AS
 SELECT pr.PrId, s.SupplierId,
@@ -203,8 +174,6 @@ WHERE s.IsActive = 1
 GROUP BY pr.PrId, s.SupplierId;
 GO
 
-/* ---------- internal: create / refresh the purchase requisition for the SHORTAGE of one requisition ----------
-   shortage = approved quantity - issued - reserved - already on an active purchase order   (paper 3.6: purchase only the shortage) */
 CREATE OR ALTER PROCEDURE dbo.usp_PurEnsurePR
     @RequisitionId INT
 AS
@@ -235,7 +204,6 @@ BEGIN
 
         IF NOT EXISTS (SELECT 1 FROM @S)
         BEGIN
-            -- nothing is short any more (stock arrived, or the shortage is already on a PO)
             IF @PrId IS NOT NULL
                 UPDATE dbo.PurchaseRequisitions SET [Status] = N'Cancelled', ReviewNote = N'No shortage left'
                 WHERE PrId = @PrId;
@@ -261,7 +229,6 @@ BEGIN
 END
 GO
 
-/* ---------- reserve (same as 16_IssuanceItemApproval.sql) + purchase requisition for the shortage ---------- */
 CREATE OR ALTER PROCEDURE dbo.usp_IssReserve
     @RequisitionId INT, @UserId INT
 AS
@@ -296,7 +263,6 @@ BEGIN
 
     COMMIT;
 
-    -- paper 3.2 step 5: reserve what is available, identify the shortage, create the purchase requisition
     EXEC dbo.usp_PurEnsurePR @RequisitionId;
 
     SELECT ISNULL((SELECT SUM(Take) FROM @T), 0) AS Reserved,
@@ -306,7 +272,6 @@ BEGIN
 END
 GO
 
-/* ---------- purchase requisition lists ---------- */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetPRs
 AS
 BEGIN
@@ -348,7 +313,6 @@ BEGIN
 END
 GO
 
-/* Head only. @Approve = 1: the budget is approved. @Approve = 0: the purchase is HELD (a reason is required) and the branch is told. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurDecidePR
     @PrId INT, @UserId INT, @Approve INT, @Note NVARCHAR(200)
 AS
@@ -376,7 +340,6 @@ BEGIN
             ReviewedById = @UserId, DateReviewed = GETDATE(), ReviewNote = NULLIF(@Note, N'')
         WHERE PrId = @PrId;
 
-        -- notify the branch: the note appears on the requisition (stock check text)
         IF @Approve = 0
             UPDATE dbo.Requisitions SET StockCheck = LEFT(N'Purchase on hold: ' + @Note, 120) WHERE RequisitionId = @ReqId;
 
@@ -384,7 +347,6 @@ BEGIN
 END
 GO
 
-/* Quotation comparison for a purchase requisition: complete quotations first, cheapest first */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetQuotes
     @PrId INT
 AS
@@ -404,8 +366,6 @@ BEGIN
 END
 GO
 
-/* Head only: purchase order for the chosen supplier, from an APPROVED purchase requisition.
-   Prices and payment terms come from the supplier. Returns the new PurchaseOrderId. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrderFromPr
     @PrId INT, @SupplierId INT, @UserId INT
 AS
@@ -576,7 +536,6 @@ BEGIN
 END
 GO
 
-/* Head only: cancel a PO that was NOT sent yet. The purchase requisition goes back to Approved so another supplier can be chosen. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCancel
     @PurchaseOrderId INT, @UserId INT
 AS
@@ -601,15 +560,3 @@ GO
 
 SET NOEXEC OFF;
 GO
-
-/* ---------------------------------------------------------------------
-   OPTIONAL - load a supplier price list quickly. The supplier prices are what the Head compares, so each supplier
-   needs a price for every product it sells. Example: price every product at 60% of the selling price for supplier 1:
-
-   INSERT INTO dbo.SupplierPrices (SupplierId, ProductId, UnitCost)
-   SELECT 1, p.ProductId, CAST(p.Price * 0.60 AS DECIMAL(12,2))
-   FROM dbo.Products p
-   WHERE NOT EXISTS (SELECT 1 FROM dbo.SupplierPrices x WHERE x.SupplierId = 1 AND x.ProductId = p.ProductId);
-
-   (send me the real price lists and I will make the load script)
-   --------------------------------------------------------------------- */
