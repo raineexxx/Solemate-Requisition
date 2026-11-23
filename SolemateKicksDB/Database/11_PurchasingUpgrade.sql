@@ -1,27 +1,7 @@
--- =====================================================================
---  Solemate Purchasing upgrade  (run AFTER 10_Issuance.sql)
---  Closes the gaps found in the system analysis review:
---   * only the three logins (cashier, manager, head): the Manager does the warehouse and purchasing work
---   * purchase only the SHORTAGE (not the whole requisition)
---   * supplier quotations / lowest-price comparison, country, payment terms, lead time
---   * PO flow: PendingApproval -> Approved -> Ordered (sent) -> Received (by Delivery)
---   * PO is linked to Delivery; receiving a PO without inspection is blocked
---   * delivery accepted -> stock is automatically reserved for the requisition
---   * in-app notifications (Head, Requester, Manager)
---   * approval stock check uses AVAILABLE stock (stock minus reserved)
---  Safe to run more than once.
--- =====================================================================
 USE SolemateKicksDB;
 GO
 
-/* ---------------------------------------------------------------
-   1. ROLES: the Head approves budgets (no separate Owner role).
-      The Manager acts as warehouse / purchasing officer: creates and sends POs, receives deliveries.
-   --------------------------------------------------------------- */
 
-/* ---------------------------------------------------------------
-   2. SUPPLIERS: country, payment terms, lead time + QUOTATIONS
-   --------------------------------------------------------------- */
 IF COL_LENGTH(N'dbo.Suppliers', N'Country') IS NULL
     ALTER TABLE dbo.Suppliers ADD Country NVARCHAR(50) NULL;
 IF COL_LENGTH(N'dbo.Suppliers', N'PaymentTerms') IS NULL
@@ -47,7 +27,6 @@ BEGIN
 END
 GO
 
-/* sample quotations so the comparison can be demonstrated (each supplier quotes a different % of the selling price) */
 INSERT INTO dbo.SupplierPrices (SupplierId, ProductId, UnitCost)
 SELECT s.SupplierId, p.ProductId,
        CAST(ROUND(p.Price * CASE WHEN s.SupplierName = N'Olem Shoe Corp' THEN 0.58
@@ -130,7 +109,6 @@ BEGIN
 END
 GO
 
-/* @SupplierId = 0 lists the quotations of every supplier */
 CREATE OR ALTER PROCEDURE dbo.usp_SupPriceList
     @SupplierId INT = 0
 AS
@@ -147,9 +125,7 @@ BEGIN
 END
 GO
 
-/* ---------------------------------------------------------------
-   3. PURCHASE ORDER: new columns + status flow, link to Delivery
-   --------------------------------------------------------------- */
+
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'PaymentTerms') IS NULL ALTER TABLE dbo.PurchaseOrders ADD PaymentTerms NVARCHAR(100) NULL;
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'ExpectedDate') IS NULL ALTER TABLE dbo.PurchaseOrders ADD ExpectedDate DATE NULL;
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'ReviewedById') IS NULL ALTER TABLE dbo.PurchaseOrders ADD ReviewedById INT NULL CONSTRAINT FK_PO_ReviewedBy REFERENCES dbo.AppUsers(UserId);
@@ -167,12 +143,7 @@ IF COL_LENGTH(N'dbo.Deliveries', N'PurchaseOrderId') IS NULL
     ALTER TABLE dbo.Deliveries ADD PurchaseOrderId INT NULL CONSTRAINT FK_Deliveries_PO REFERENCES dbo.PurchaseOrders(PurchaseOrderId);
 GO
 
-/* ---------------------------------------------------------------
-   4. SHORTAGE = what must really be bought for a requisition
-      need  = requested - already issued - already reserved
-      free  = stock - reserved (never below 0)
-      shortage = need - free (never below 0)
-   --------------------------------------------------------------- */
+
 CREATE OR ALTER FUNCTION dbo.fn_PurShortage (@RequisitionId INT)
 RETURNS TABLE
 AS
@@ -201,7 +172,6 @@ BEGIN
 END
 GO
 
-/* Quotation comparison for the shortage of a requisition: best (complete + cheapest) supplier first */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetQuotes
     @RequisitionId INT
 AS
@@ -226,9 +196,7 @@ BEGIN
 END
 GO
 
-/* ---------------------------------------------------------------
-   5. PURCHASE ORDER PROCEDURES
-   --------------------------------------------------------------- */
+   
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetOrders
 AS
 BEGIN
