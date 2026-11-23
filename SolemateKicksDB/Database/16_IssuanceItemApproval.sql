@@ -4,7 +4,7 @@ GO
 IF COL_LENGTH(N'dbo.RequisitionItems', N'ItemStatus') IS NULL
 BEGIN
     RAISERROR('Run 14_ItemApproval.sql first: RequisitionItems.ItemStatus was not found.', 16, 1);
-    SET NOEXEC ON;   -- skips the rest of this script
+    SET NOEXEC ON;  
 END
 GO
 
@@ -84,7 +84,6 @@ BEGIN
 END
 GO
 
-/* Issue the reserved quantities: slip + stock deduction. The requisition is closed later, when the branch signs. */
 CREATE OR ALTER PROCEDURE dbo.usp_IssCreate
     @RequisitionId INT, @UserId INT
 AS
@@ -131,14 +130,10 @@ BEGIN
 
     COMMIT;
 
-    -- Closed is always 0 here: the requisition closes when the branch signs (usp_IssAcknowledge)
     SELECT @IssueNo AS IssueNo, CAST(0 AS BIT) AS Closed;
 END
 GO
 
-/* The receiving branch signs for the goods (cashier or manager of that branch).
-   When every approved item has been issued and every slip is signed, the requisition is closed.
-   Returns one row: Closed = 1 when this signature closed the requisition. */
 CREATE OR ALTER PROCEDURE dbo.usp_IssAcknowledge
     @IssuanceId INT, @UserId INT, @ReceivedBy NVARCHAR(100)
 AS
