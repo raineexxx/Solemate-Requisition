@@ -774,6 +774,8 @@ namespace SolemateKicks
         //  (instead of a second window). The page's BACK / CLOSE button returns to the requisition list.
         // ==================================================================
         private Panel _pageHost;
+        private Form _page;
+        private bool _pageShown;
 
         private void OpenPage(Form page, string title)
         {
@@ -785,6 +787,9 @@ namespace SolemateKicks
             root.Visible = false;
             Text = "Solemate - " + title;
 
+            _page = page;
+            _pageShown = false;
+
             page.TopLevel = false;
             page.FormBorderStyle = FormBorderStyle.None;
             page.Dock = DockStyle.Fill;
@@ -792,30 +797,44 @@ namespace SolemateKicks
             _pageHost.Controls.Add(page);
 
             // the pages load their data in the Shown event; make sure it runs when the page is not a top-level window
-            bool shown = false;
-            page.Shown += (s, e) => shown = true;
-
-            page.FormClosed += (s, e) =>
-            {
-                Controls.Remove(_pageHost);
-                _pageHost.Dispose();
-                _pageHost = null;
-                page.Dispose();
-                root.Visible = true;
-                Text = "Solemate - Requisition";
-                LoadData();                  // stock and requisition statuses may have changed
-                UpdateNotificationCount();
-            };
+            page.Shown += OnPageShown;
+            page.FormClosed += OnPageClosed;
 
             page.Show();
 
-            BeginInvoke(new Action(() =>
-            {
-                if (shown || page.IsDisposed) return;
-                System.Reflection.MethodInfo m = typeof(Form).GetMethod("OnShown",
-                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                if (m != null) m.Invoke(page, new object[] { EventArgs.Empty });
-            }));
+            BeginInvoke(new MethodInvoker(EnsurePageShown));
+        }
+
+        private void OnPageShown(object sender, EventArgs e)
+        {
+            _pageShown = true;
+        }
+
+        private void EnsurePageShown()
+        {
+            if (_pageShown || _page == null || _page.IsDisposed) return;
+
+            System.Reflection.MethodInfo m = typeof(Form).GetMethod("OnShown",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (m != null) m.Invoke(_page, new object[] { EventArgs.Empty });
+        }
+
+        private void OnPageClosed(object sender, FormClosedEventArgs e)
+        {
+            Form page = (Form)sender;
+            page.Shown -= OnPageShown;
+            page.FormClosed -= OnPageClosed;
+
+            Controls.Remove(_pageHost);
+            _pageHost.Dispose();
+            _pageHost = null;
+            _page = null;
+            page.Dispose();
+
+            root.Visible = true;
+            Text = "Solemate - Requisition";
+            LoadData();                  // stock and requisition statuses may have changed
+            UpdateNotificationCount();
         }
 
         private void OnInventory(object sender, EventArgs e)
