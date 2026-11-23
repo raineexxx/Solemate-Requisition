@@ -1,16 +1,3 @@
--- =====================================================================
---  Solemate - formal supplier QUOTATIONS per purchase requisition   (run AFTER 12_PaperAlignment.sql)
---  Paper 3.3: "supplier quotations are obtained from the UK and Vietnam suppliers and evaluated,
---              following the client's current practice of choosing the lowest price".
---   * a quotation = one supplier's price for every item of the approved purchase requisition (the SHORTAGE only)
---     plus the payment terms offered for that order
---   * at least TWO quotations are needed before a purchase order can be created
---   * the PO is priced from the chosen quotation and uses its payment terms
---   * every saved quotation also updates the supplier's price list (QUOTATIONS tab) for future comparison
---   * no new accounts: the Manager (purchasing officer) records quotations and creates the PO,
---     the Head can also record quotations; the Head's budget approval of the purchase requisition stays as it is
---  Safe to run more than once.
--- =====================================================================
 USE SolemateKicksDB;
 GO
 
@@ -64,8 +51,6 @@ BEGIN
 END
 GO
 
-/* Items to buy (the shortage) with the price this supplier already quoted for this requisition.
-   If there is no quotation yet, the supplier's price list (QUOTATIONS tab) is used as a suggestion; 0 when there is none. */
 CREATE OR ALTER PROCEDURE dbo.usp_QuoGetItems
     @RequisitionId INT,
     @SupplierId    INT
@@ -88,8 +73,6 @@ BEGIN
 END
 GO
 
-/* Add or update the quotation of one supplier for one requisition. Manager (purchasing officer) or Head.
-   @Items is XML text: <items><i p="ProductId" u="UnitPrice"/>...</items>. Returns the QuotationId. */
 CREATE OR ALTER PROCEDURE dbo.usp_QuoSave
     @RequisitionId INT,
     @SupplierId    INT,
@@ -169,8 +152,6 @@ BEGIN
 END
 GO
 
-/* Manager: create the APPROVED purchase order from the budget-approved purchase requisition and the CHOSEN QUOTATION.
-   Same flow as script 12, plus: at least two quotations are required; prices and payment terms come from the quotation. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @RequisitionId INT,
     @SupplierId    INT,
