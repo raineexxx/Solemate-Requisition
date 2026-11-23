@@ -1,20 +1,6 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Requisitions - the Head approves or rejects EACH ITEM, and Purchasing only sees approved items
-
-   Run AFTER 13_SelectItems.sql. Safe to run more than once.
-
-   How it works
-   - Every requisition item has its own decision: Pending, Approved or Rejected (a rejected item has a reason).
-   - The requisition becomes Approved when at least one item is approved (rejected items stay marked as rejected),
-     and Rejected when every item is rejected.
-   - Purchasing (+ NEW PO) lists only approved items that still have quantity left to order.
-   - Old requisitions are filled in: items of Approved requisitions count as approved, items of Rejected ones as rejected.
-   - usp_ApproveRequisition and usp_RejectRequisition keep their old behaviour (whole request) and now also set the items.
-   ===================================================================== */
-
 IF COL_LENGTH(N'dbo.RequisitionItems', N'ItemStatus') IS NULL
     ALTER TABLE dbo.RequisitionItems
         ADD ItemStatus NVARCHAR(20) NOT NULL CONSTRAINT DF_ReqItems_Status DEFAULT N'Pending'
