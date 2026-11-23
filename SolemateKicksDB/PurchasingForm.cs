@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Reflection;
@@ -21,8 +21,9 @@ namespace SolemateKicks
 
         private PurchaseRequisitionsPanel pnlPr;
         private PurchaseOrdersPanel pnlOrders;
+        private QuotationsPanel pnlQuotes;
         private SuppliersPanel pnlSuppliers;
-        private Button btnTabPr, btnTabOrders, btnTabSuppliers;
+        private Button btnTabPr, btnTabQuotes, btnTabOrders, btnTabSuppliers;
 
         public PurchasingForm()
         {
@@ -68,7 +69,7 @@ namespace SolemateKicks
 
         private Control BuildHeader()
         {
-            Panel header = Theme.MakeHeader("Purchasing", "Purchase requisitions, purchase orders and suppliers");
+            Panel header = Theme.MakeHeader("Purchasing", "Purchase requisitions, quotations, purchase orders and suppliers");
 
             Panel rightBox = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Theme.Red };
 
@@ -106,10 +107,12 @@ namespace SolemateKicks
             };
 
             btnTabPr = Theme.MakeButton("PURCHASE REQUISITIONS", 250, true, OnTabPr);
+            btnTabQuotes = Theme.MakeButton("QUOTATIONS", 150, false, OnTabQuotes);
             btnTabOrders = Theme.MakeButton("PURCHASE ORDERS", 190, false, OnTabOrders);
             btnTabSuppliers = Theme.MakeButton("SUPPLIERS", 150, false, OnTabSuppliers);
 
             flow.Controls.Add(btnTabPr);
+            flow.Controls.Add(btnTabQuotes);
             flow.Controls.Add(btnTabOrders);
             flow.Controls.Add(btnTabSuppliers);
             foreach (Control c in flow.Controls) c.Margin = new Padding(4, 0, 4, 0);
@@ -123,14 +126,17 @@ namespace SolemateKicks
             pnlPr = new PurchaseRequisitionsPanel();
             pnlOrders = new PurchaseOrdersPanel();
             pnlOrders.Visible = false;
+            pnlQuotes = new QuotationsPanel();
+            pnlQuotes.Visible = false;
             pnlSuppliers = new SuppliersPanel();
             pnlSuppliers.Visible = false;
 
             // after a purchase order is created, show the PURCHASE ORDERS tab
-            pnlPr.OrderCreated += delegate { ShowTab(1); };
+            pnlPr.OrderCreated += OnOrderCreated;
 
             host.Controls.Add(pnlPr);
             host.Controls.Add(pnlOrders);
+            host.Controls.Add(pnlQuotes);
             host.Controls.Add(pnlSuppliers);
             return host;
         }
@@ -141,16 +147,24 @@ namespace SolemateKicks
         private void ShowTab(int tab)
         {
             pnlPr.Visible = tab == 0;
-            pnlOrders.Visible = tab == 1;
-            pnlSuppliers.Visible = tab == 2;
+            pnlQuotes.Visible = tab == 1;
+            pnlOrders.Visible = tab == 2;
+            pnlSuppliers.Visible = tab == 3;
 
             Theme.StyleButton(btnTabPr, tab == 0);
-            Theme.StyleButton(btnTabOrders, tab == 1);
-            Theme.StyleButton(btnTabSuppliers, tab == 2);
+            Theme.StyleButton(btnTabQuotes, tab == 1);
+            Theme.StyleButton(btnTabOrders, tab == 2);
+            Theme.StyleButton(btnTabSuppliers, tab == 3);
 
             if (tab == 0) pnlPr.LoadData();
-            else if (tab == 1) pnlOrders.LoadData();
+            else if (tab == 1) pnlQuotes.LoadData();
+            else if (tab == 2) pnlOrders.LoadData();
             else pnlSuppliers.LoadData();
+        }
+
+        private void OnOrderCreated(object sender, EventArgs e)
+        {
+            ShowTab(2);
         }
 
         private void OnTabPr(object sender, EventArgs e)
@@ -158,14 +172,19 @@ namespace SolemateKicks
             ShowTab(0);
         }
 
-        private void OnTabOrders(object sender, EventArgs e)
+        private void OnTabQuotes(object sender, EventArgs e)
         {
             ShowTab(1);
         }
 
-        private void OnTabSuppliers(object sender, EventArgs e)
+        private void OnTabOrders(object sender, EventArgs e)
         {
             ShowTab(2);
+        }
+
+        private void OnTabSuppliers(object sender, EventArgs e)
+        {
+            ShowTab(3);
         }
 
         private void OnBack(object sender, EventArgs e)
@@ -277,11 +296,16 @@ namespace SolemateKicks
             Theme.AddColumn(grid, "colNote", "NOTE", "ReviewNote", 20);
 
             grid.CellFormatting += OnCellFormatting;
-            grid.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) OnViewItems(null, EventArgs.Empty); };
+            grid.CellDoubleClick += OnGridDoubleClick;
 
             card.Controls.Add(grid);
             card.Controls.Add(Theme.MakeSectionTitle("Purchase requisitions"));
             return card;
+        }
+
+        private void OnGridDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0) OnViewItems(null, EventArgs.Empty);
         }
 
         private void OnCellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
@@ -559,11 +583,16 @@ namespace SolemateKicks
             Theme.AddColumn(grid, "colTotal", "TOTAL (PHP)", "Total", 12, "N2", true, DataGridViewContentAlignment.MiddleRight);
 
             grid.CellFormatting += OnCellFormatting;
-            grid.CellDoubleClick += delegate (object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) OnViewItems(null, EventArgs.Empty); };
+            grid.CellDoubleClick += OnGridDoubleClick;
 
             card.Controls.Add(grid);
             card.Controls.Add(Theme.MakeSectionTitle("Purchase orders"));
             return card;
+        }
+
+        private void OnGridDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0) OnViewItems(null, EventArgs.Empty);
         }
 
         private void OnCellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
