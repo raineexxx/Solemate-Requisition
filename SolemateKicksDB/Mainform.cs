@@ -769,22 +769,63 @@ namespace SolemateKicks
             }
         }
 
+        // ==================================================================
+        //  ONE WINDOW: Inventory, Sales, Issuance, Purchasing, Delivery and Notifications open as a PAGE inside this window
+        //  (instead of a second window). The page's BACK / CLOSE button returns to the requisition list.
+        // ==================================================================
+        private Panel _pageHost;
+
+        private void OpenPage(Form page, string title)
+        {
+            if (_pageHost != null) { page.Dispose(); return; }   // a page is already open
+
+            _pageHost = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Canvas };
+            Controls.Add(_pageHost);
+            _pageHost.BringToFront();
+            root.Visible = false;
+            Text = "Solemate - " + title;
+
+            page.TopLevel = false;
+            page.FormBorderStyle = FormBorderStyle.None;
+            page.Dock = DockStyle.Fill;
+            page.MinimumSize = Size.Empty;
+            _pageHost.Controls.Add(page);
+
+            // the pages load their data in the Shown event; make sure it runs when the page is not a top-level window
+            bool shown = false;
+            page.Shown += (s, e) => shown = true;
+
+            page.FormClosed += (s, e) =>
+            {
+                Controls.Remove(_pageHost);
+                _pageHost.Dispose();
+                _pageHost = null;
+                page.Dispose();
+                root.Visible = true;
+                Text = "Solemate - Requisition";
+                LoadData();                  // stock and requisition statuses may have changed
+                UpdateNotificationCount();
+            };
+
+            page.Show();
+
+            BeginInvoke(new Action(() =>
+            {
+                if (shown || page.IsDisposed) return;
+                System.Reflection.MethodInfo m = typeof(Form).GetMethod("OnShown",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (m != null) m.Invoke(page, new object[] { EventArgs.Empty });
+            }));
+        }
+
         private void OnInventory(object sender, EventArgs e)
         {
-            using (InventoryForm f = new InventoryForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();   // stock may have changed, so refresh the "In stock" / "Stock check" columns
+            OpenPage(new InventoryForm(), "Inventory");   // stock may have changed: the requisition list is refreshed when the page is closed
         }
 
         private void OnNotifications(object sender, EventArgs e)
         {
-            using (NotificationsForm f = new NotificationsForm())
-            {
-                f.ShowDialog(this);
-            }
-            UpdateNotificationCount();
+            OpenPage(new NotificationsForm(), "Notifications");
         }
 
         /// <summary>Shows how many unread notifications this user has on the NOTIFICATIONS button.</summary>
@@ -804,38 +845,22 @@ namespace SolemateKicks
 
         private void OnSales(object sender, EventArgs e)
         {
-            using (SalesForm f = new SalesForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();   // stock changed, so refresh the stock columns
+            OpenPage(new SalesForm(), "Sales");
         }
 
         private void OnIssuance(object sender, EventArgs e)
         {
-            using (IssuanceForm f = new IssuanceForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();   // issued requisitions become Closed
+            OpenPage(new IssuanceForm(), "Issuance");
         }
 
         private void OnPurchasing(object sender, EventArgs e)
         {
-            using (PurchasingForm f = new PurchasingForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();
+            OpenPage(new PurchasingForm(), "Purchasing");
         }
 
         private void OnDelivery(object sender, EventArgs e)
         {
-            using (DeliveryForm f = new DeliveryForm())
-            {
-                f.ShowDialog(this);
-            }
-            LoadData();   // received goods change the stock, so refresh the stock check columns
+            OpenPage(new DeliveryForm(), "Delivery");
         }
 
         /// <summary>
