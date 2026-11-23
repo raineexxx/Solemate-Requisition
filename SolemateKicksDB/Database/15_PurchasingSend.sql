@@ -1,17 +1,6 @@
 USE SolemateKicksDB;
 GO
 
-/* =====================================================================
-   Purchasing - the Manager sends a purchase order to the supplier
-
-   Run AFTER 13_SelectItems.sql (and the Delivery scripts 6_ and 7_).
-   Sending a PO:
-     - marks it as sent (PurchaseOrders.DateSent)
-     - records an EXPECTED delivery in the Delivery module (PoRef = the PO number,
-       same supplier, same items and quantities), so the Manager sees it on the Delivery screen.
-   Safe to run more than once.
-   ===================================================================== */
-
 IF COL_LENGTH(N'dbo.PurchaseOrders', N'DateSent') IS NULL
     ALTER TABLE dbo.PurchaseOrders ADD DateSent DATETIME NULL;
 GO
@@ -41,7 +30,7 @@ BEGIN
     IF @SupplierId IS NULL
         THROW 50044, N'This purchase order has no supplier.', 1;
 
-    DECLARE @Expected DATE = DATEADD(DAY, 7, CAST(GETDATE() AS DATE));   -- default lead time: 7 days
+    DECLARE @Expected DATE = DATEADD(DAY, 7, CAST(GETDATE() AS DATE));  
 
     BEGIN TRAN;
 
