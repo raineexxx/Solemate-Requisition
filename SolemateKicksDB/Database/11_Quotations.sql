@@ -13,7 +13,6 @@ DECLARE @sql NVARCHAR(MAX) =
 EXEC (@sql);
 GO
 
-/* ---------------- NEW COLUMNS ---------------- */
 IF COL_LENGTH(N'dbo.Suppliers', N'Country') IS NULL
     ALTER TABLE dbo.Suppliers ADD Country NVARCHAR(50) NOT NULL CONSTRAINT DF_Suppliers_Country DEFAULT N'';
 GO
@@ -28,7 +27,6 @@ IF COL_LENGTH(N'dbo.PurchaseOrders', N'SentById') IS NULL
     ALTER TABLE dbo.PurchaseOrders ADD SentById INT NULL CONSTRAINT FK_PO_SentBy REFERENCES dbo.AppUsers(UserId);
 GO
 
-/* fill the country of the suppliers that already exist */
 UPDATE dbo.Suppliers
 SET Country = CASE
         WHEN [Address] LIKE N'%Vietnam%'        THEN N'Vietnam'
@@ -39,7 +37,6 @@ SET Country = CASE
 WHERE Country = N'';
 GO
 
-/* ---------------- QUOTATION TABLES ---------------- */
 IF OBJECT_ID(N'dbo.Quotations') IS NULL
 BEGIN
     CREATE TABLE dbo.Quotations (
@@ -65,9 +62,7 @@ BEGIN
 END
 GO
 
-/* ---------------- QUOTATION PROCEDURES ---------------- */
 
-/* Quotations of one requisition with their totals; IsLowest = 1 for the cheapest total */
 CREATE OR ALTER PROCEDURE dbo.usp_QuoGetForRequisition
     @RequisitionId INT
 AS
@@ -111,8 +106,6 @@ BEGIN
 END
 GO
 
-/* Add or update the quotation of one supplier for one requisition. Head only.
-   @Items is XML text: <items><i p="ProductId" u="UnitPrice"/>...</items>. Returns the QuotationId. */
 CREATE OR ALTER PROCEDURE dbo.usp_QuoSave
     @RequisitionId INT,
     @SupplierId    INT,
@@ -179,9 +172,7 @@ BEGIN
 END
 GO
 
-/* ---------------- PURCHASE ORDER PROCEDURES ---------------- */
 
-/* List of purchase orders (now with payment terms and the date sent) */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetOrders
 AS
 BEGIN
@@ -199,8 +190,7 @@ BEGIN
 END
 GO
 
-/* Create a PO from an approved requisition and the chosen supplier's QUOTATION. Head only.
-   Needs at least two quotations (the UK and Vietnam suppliers). Returns the new PurchaseOrderId. */
+
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @RequisitionId INT,
     @SupplierId    INT,
@@ -251,7 +241,6 @@ BEGIN
 END
 GO
 
-/* Header of one PO, for the written purchase order */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetOrderHeader
     @PurchaseOrderId INT
 AS
@@ -274,7 +263,6 @@ BEGIN
 END
 GO
 
-/* Items of one PO, for the written purchase order */
 CREATE OR ALTER PROCEDURE dbo.usp_PurGetOrderItems
     @PurchaseOrderId INT
 AS
@@ -289,7 +277,6 @@ BEGIN
 END
 GO
 
-/* Record that the written PO was sent to the supplier. Head only. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurMarkSent
     @PurchaseOrderId INT,
     @UserId          INT
@@ -348,7 +335,6 @@ BEGIN
 END
 GO
 
-/* ---------------- SUPPLIER PROCEDURES ---------------- */
 
 CREATE OR ALTER PROCEDURE dbo.usp_SupGetAll
     @ActiveOnly INT = 0
@@ -366,7 +352,6 @@ BEGIN
 END
 GO
 
-/* Add (@SupplierId = 0) or edit a supplier. Head only. Returns the SupplierId. */
 CREATE OR ALTER PROCEDURE dbo.usp_SupSave
     @SupplierId   INT,
     @SupplierName NVARCHAR(100),
@@ -425,7 +410,6 @@ BEGIN
 END
 GO
 
-/* Delete a supplier. Head only. Not allowed when quotations, purchase orders or deliveries use it. */
 CREATE OR ALTER PROCEDURE dbo.usp_SupDelete
     @SupplierId INT,
     @UserId     INT
@@ -450,7 +434,6 @@ BEGIN
 END
 GO
 
-/* Order history of one supplier (kept for future price and supplier comparison) */
 CREATE OR ALTER PROCEDURE dbo.usp_SupOrderHistory
     @SupplierId INT
 AS
