@@ -66,7 +66,6 @@ BEGIN
 END
 GO
 
-/* Create a PO from an approved requisition. Returns the new PurchaseOrderId. */
 CREATE OR ALTER PROCEDURE dbo.usp_PurCreateOrder
     @RequisitionId INT, @Supplier NVARCHAR(100), @UserId INT
 AS
@@ -102,5 +101,3 @@ BEGIN
     SELECT @PoId;
 END
 GO
-
-/* usp_PurReceiveOrder (with the Head / Manager check) is created by 5_PurchasingRoles.sql */
