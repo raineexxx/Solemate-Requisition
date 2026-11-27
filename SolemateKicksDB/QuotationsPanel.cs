@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -115,7 +115,7 @@ namespace SolemateKicks
                 _suppliers = PurchasingService.GetSuppliers(true);
 
                 cmbSupplier.Items.Clear();
-                cmbSupplier.Items.Add(new SupplierRow { SupplierId = 0, SupplierName = "All suppliers" });
+                cmbSupplier.Items.Add(new SupplierRow { SupplierId = 0, SupplierName = "-- Select Supplier --" });
                 foreach (SupplierRow s in _suppliers) cmbSupplier.Items.Add(s);
 
                 cmbSupplier.SelectedIndex = 0;
